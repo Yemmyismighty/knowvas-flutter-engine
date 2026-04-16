@@ -1,0 +1,41 @@
+{
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit"
+  },
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.rulers": [120],
+    "editor.selectionHighlight": false,
+    "editor.suggest.snippetsPreventQuickSuggestions": false,
+    "editor.suggestSelection": "first",
+    "editor.tabCompletion": "onlySnippets",
+    "editor.wordBasedSuggestions": "off"
+  },
+  "[kotlin]": {
+    "editor.formatOnSave": true,
+    "editor.rulers": [120]
+  },
+  "[swift]": {
+    "editor.formatOnSave": true,
+    "editor.rulers": [120]
+  },
+  "dart.lineLength": 120,
+  "dart.analysisExcludedFolders": [
+    ".dart_tool",
+    "build",
+    ".idea"
+  ],
+  "files.exclude": {
+    "**/.dart_tool": true,
+    "**/.packages": true,
+    "**/build": true
+  },
+  "search.exclude": {
+    "**/.dart_tool": true,
+    "**/build": true,
+    "**/.gradle": true,
+    "**/Pods": true
+  }
+}

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Configuration for Knowvas Flutter Client
+    
+    This configuration enforces HTTPS-only connections and provides
+    certificate pinning support for production environments.
+    
+    For more information:
+    https://developer.android.com/training/articles/security-config
+-->
+<network-security-config>
+    <!-- Base configuration: Enforce HTTPS for all connections -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <!-- Trust system certificate authorities -->
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    
+    <!-- 
+        Production API Domain Configuration
+        
+        Certificate Pinning (Optional but Recommended):
+        - Uncomment the pin-set section below to enable certificate pinning
+        - Replace placeholder hashes with actual certificate SHA-256 fingerprints
+        - Include both primary and backup certificate pins
+        - Set expiration date for pin rotation
+        
+        To get certificate fingerprint:
+        openssl s_client -connect api.knowvas.com:443 < /dev/null | \
+          openssl x509 -pubkey -noout | \
+          openssl pkey -pubin -outform der | \
+          openssl dgst -sha256 -binary | \
+          openssl base64
+    -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">api.knowvas.com</domain>
+        
+        <!-- 
+        Uncomment to enable certificate pinning:
+        
+        <pin-set expiration="2026-12-31">
+            <pin digest="SHA-256">REPLACE_WITH_PRIMARY_CERT_HASH</pin>
+            <pin digest="SHA-256">REPLACE_WITH_BACKUP_CERT_HASH</pin>
+        </pin-set>
+        -->
+    </domain-config>
+    
+    <!-- Staging API Domain Configuration -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">staging-api.knowvas.com</domain>
+    </domain-config>
+    
+    <!-- Development API Domain Configuration -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">dev-api.knowvas.com</domain>
+    </domain-config>
+    
+    <!-- 
+        Debug Overrides
+        
+        These settings only apply to debug builds and allow:
+        - User-installed certificates (for testing with proxy tools)
+        - Cleartext traffic to localhost (for local development)
+        
+        These overrides are automatically disabled in release builds.
+    -->
+    <debug-overrides>
+        <trust-anchors>
+            <!-- Trust user-installed certificates for debugging -->
+            <certificates src="user" />
+            <!-- Also trust system certificates -->
+            <certificates src="system" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

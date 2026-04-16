@@ -1,0 +1,563 @@
+{
+  "@@locale": "en",
+  
+  "appName": "Knowvas",
+  "@appName": {
+    "description": "The application name"
+  },
+
+  "signIn": "Sign In",
+  "@signIn": {
+    "description": "Sign in button text"
+  },
+
+  "signUp": "Sign Up",
+  "@signUp": {
+    "description": "Sign up button text"
+  },
+
+  "signOut": "Sign Out",
+  "@signOut": {
+    "description": "Sign out button text"
+  },
+
+  "email": "Email",
+  "@email": {
+    "description": "Email field label"
+  },
+
+  "password": "Password",
+  "@password": {
+    "description": "Password field label"
+  },
+
+  "confirmPassword": "Confirm Password",
+  "@confirmPassword": {
+    "description": "Confirm password field label"
+  },
+
+  "firstName": "First Name",
+  "@firstName": {
+    "description": "First name field label"
+  },
+
+  "lastName": "Last Name",
+  "@lastName": {
+    "description": "Last name field label"
+  },
+
+  "forgotPassword": "Forgot Password?",
+  "@forgotPassword": {
+    "description": "Forgot password link text"
+  },
+
+  "resetPassword": "Reset Password",
+  "@resetPassword": {
+    "description": "Reset password button text"
+  },
+
+  "dontHaveAccount": "Don't have an account?",
+  "@dontHaveAccount": {
+    "description": "Sign up prompt text"
+  },
+
+  "alreadyHaveAccount": "Already have an account?",
+  "@alreadyHaveAccount": {
+    "description": "Sign in prompt text"
+  },
+
+  "discover": "Discover",
+  "@discover": {
+    "description": "Discover tab label"
+  },
+
+  "library": "Library",
+  "@library": {
+    "description": "Library tab label"
+  },
+
+  "profile": "Profile",
+  "@profile": {
+    "description": "Profile tab label"
+  },
+
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings tab label"
+  },
+
+  "search": "Search",
+  "@search": {
+    "description": "Search button text"
+  },
+
+  "searchContent": "Search for books, comics, magazines...",
+  "@searchContent": {
+    "description": "Search field hint text"
+  },
+
+  "featured": "Featured",
+  "@featured": {
+    "description": "Featured section title"
+  },
+
+  "bestsellers": "Bestsellers",
+  "@bestsellers": {
+    "description": "Bestsellers section title"
+  },
+
+  "newReleases": "New Releases",
+  "@newReleases": {
+    "description": "New releases section title"
+  },
+
+  "trending": "Trending",
+  "@trending": {
+    "description": "Trending section title"
+  },
+
+  "allBooks": "All Books",
+  "@allBooks": {
+    "description": "All books filter label"
+  },
+
+  "ebooks": "Ebooks",
+  "@ebooks": {
+    "description": "Ebooks filter label"
+  },
+
+  "comics": "Comics",
+  "@comics": {
+    "description": "Comics filter label"
+  },
+
+  "magazines": "Magazines",
+  "@magazines": {
+    "description": "Magazines filter label"
+  },
+
+  "audiobooks": "Audiobooks",
+  "@audiobooks": {
+    "description": "Audiobooks filter label"
+  },
+
+  "addToCart": "Add to Cart",
+  "@addToCart": {
+    "description": "Add to cart button text"
+  },
+
+  "buyNow": "Buy Now",
+  "@buyNow": {
+    "description": "Buy now button text"
+  },
+
+  "cart": "Cart",
+  "@cart": {
+    "description": "Cart button text"
+  },
+
+  "checkout": "Checkout",
+  "@checkout": {
+    "description": "Checkout button text"
+  },
+
+  "download": "Download",
+  "@download": {
+    "description": "Download button text"
+  },
+
+  "downloading": "Downloading...",
+  "@downloading": {
+    "description": "Downloading status text"
+  },
+
+  "downloaded": "Downloaded",
+  "@downloaded": {
+    "description": "Downloaded status text"
+  },
+
+  "read": "Read",
+  "@read": {
+    "description": "Read button text"
+  },
+
+  "continueReading": "Continue",
+  "@continueReading": {
+    "description": "Continue button text"
+  },
+
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel button text"
+  },
+
+  "delete": "Delete",
+  "@delete": {
+    "description": "Delete button text"
+  },
+
+  "remove": "Remove",
+  "@remove": {
+    "description": "Remove button text"
+  },
+
+  "save": "Save",
+  "@save": {
+    "description": "Save button text"
+  },
+
+  "edit": "Edit",
+  "@edit": {
+    "description": "Edit button text"
+  },
+
+  "done": "Done",
+  "@done": {
+    "description": "Done button text"
+  },
+
+  "ok": "OK",
+  "@ok": {
+    "description": "OK button text"
+  },
+
+  "yes": "Yes",
+  "@yes": {
+    "description": "Yes button text"
+  },
+
+  "no": "No",
+  "@no": {
+    "description": "No button text"
+  },
+
+  "retry": "Retry",
+  "@retry": {
+    "description": "Retry button text"
+  },
+
+  "bookmarks": "Bookmarks",
+  "@bookmarks": {
+    "description": "Bookmarks label"
+  },
+
+  "highlights": "Highlights",
+  "@highlights": {
+    "description": "Highlights label"
+  },
+
+  "notes": "Notes",
+  "@notes": {
+    "description": "Notes label"
+  },
+
+  "fontSize": "Font Size",
+  "@fontSize": {
+    "description": "Font size setting label"
+  },
+
+  "fontFamily": "Font Family",
+  "@fontFamily": {
+    "description": "Font family setting label"
+  },
+
+  "theme": "Theme",
+  "@theme": {
+    "description": "Theme setting label"
+  },
+
+  "light": "Light",
+  "@light": {
+    "description": "Light theme option"
+  },
+
+  "dark": "Dark",
+  "@dark": {
+    "description": "Dark theme option"
+  },
+
+  "sepia": "Sepia",
+  "@sepia": {
+    "description": "Sepia theme option"
+  },
+
+  "language": "Language",
+  "@language": {
+    "description": "Language setting label"
+  },
+
+  "notifications": "Notifications",
+  "@notifications": {
+    "description": "Notifications setting label"
+  },
+
+  "privacy": "Privacy",
+  "@privacy": {
+    "description": "Privacy setting label"
+  },
+
+  "about": "About",
+  "@about": {
+    "description": "About setting label"
+  },
+
+  "account": "Account",
+  "@account": {
+    "description": "Account setting label"
+  },
+
+  "readingPreferences": "Reading Preferences",
+  "@readingPreferences": {
+    "description": "Reading preferences setting label"
+  },
+
+  "downloads": "Downloads",
+  "@downloads": {
+    "description": "Downloads setting label"
+  },
+
+  "autoDownload": "Auto Download",
+  "@autoDownload": {
+    "description": "Auto download setting label"
+  },
+
+  "downloadQuality": "Download Quality",
+  "@downloadQuality": {
+    "description": "Download quality setting label"
+  },
+
+  "wifiOnly": "WiFi Only",
+  "@wifiOnly": {
+    "description": "WiFi only downloads setting label"
+  },
+
+  "currency": "Currency",
+  "@currency": {
+    "description": "Currency setting label"
+  },
+
+  "followers": "Followers",
+  "@followers": {
+    "description": "Followers label"
+  },
+
+  "following": "Following",
+  "@following": {
+    "description": "Following label"
+  },
+
+  "follow": "Follow",
+  "@follow": {
+    "description": "Follow button text"
+  },
+
+  "unfollow": "Unfollow",
+  "@unfollow": {
+    "description": "Unfollow button text"
+  },
+
+  "reviews": "Reviews",
+  "@reviews": {
+    "description": "Reviews label"
+  },
+
+  "writeReview": "Write a Review",
+  "@writeReview": {
+    "description": "Write review button text"
+  },
+
+  "rating": "Rating",
+  "@rating": {
+    "description": "Rating label"
+  },
+
+  "readingGoals": "Reading Goals",
+  "@readingGoals": {
+    "description": "Reading goals label"
+  },
+
+  "achievements": "Achievements",
+  "@achievements": {
+    "description": "Achievements label"
+  },
+
+  "readingStats": "Reading Stats",
+  "@readingStats": {
+    "description": "Reading stats label"
+  },
+
+  "booksRead": "Books Read",
+  "@booksRead": {
+    "description": "Books read label"
+  },
+
+  "readingTime": "Reading Time",
+  "@readingTime": {
+    "description": "Reading time label"
+  },
+
+  "currentStreak": "Current Streak",
+  "@currentStreak": {
+    "description": "Current streak label"
+  },
+
+  "favoriteGenre": "Favorite Genre",
+  "@favoriteGenre": {
+    "description": "Favorite genre label"
+  },
+
+  "collections": "Collections",
+  "@collections": {
+    "description": "Collections label"
+  },
+
+  "createCollection": "Create Collection",
+  "@createCollection": {
+    "description": "Create collection button text"
+  },
+
+  "collectionName": "Collection Name",
+  "@collectionName": {
+    "description": "Collection name field label"
+  },
+
+  "description": "Description",
+  "@description": {
+    "description": "Description field label"
+  },
+
+  "public": "Public",
+  "@public": {
+    "description": "Public visibility option"
+  },
+
+  "private": "Private",
+  "@private": {
+    "description": "Private visibility option"
+  },
+
+  "errorOccurred": "An error occurred",
+  "@errorOccurred": {
+    "description": "Generic error message"
+  },
+
+  "networkError": "Unable to connect. Please check your internet connection.",
+  "@networkError": {
+    "description": "Network error message"
+  },
+
+  "serverError": "Something went wrong. Please try again later.",
+  "@serverError": {
+    "description": "Server error message"
+  },
+
+  "authError": "Authentication failed. Please sign in again.",
+  "@authError": {
+    "description": "Authentication error message"
+  },
+
+  "emptyLibrary": "Your library is empty",
+  "@emptyLibrary": {
+    "description": "Empty library message"
+  },
+
+  "emptyCart": "Your cart is empty",
+  "@emptyCart": {
+    "description": "Empty cart message"
+  },
+
+  "noResults": "No results found",
+  "@noResults": {
+    "description": "No search results message"
+  },
+
+  "offline": "Offline",
+  "@offline": {
+    "description": "Offline indicator text"
+  },
+
+  "online": "Online",
+  "@online": {
+    "description": "Online indicator text"
+  },
+
+  "page": "Page",
+  "@page": {
+    "description": "Page label"
+  },
+
+  "pageOf": "of",
+  "@pageOf": {
+    "description": "Of preposition (e.g., Page 1 of 10)"
+  },
+
+  "author": "Author",
+  "@author": {
+    "description": "Author label"
+  },
+
+  "genre": "Genre",
+  "@genre": {
+    "description": "Genre label"
+  },
+
+  "price": "Price",
+  "@price": {
+    "description": "Price label"
+  },
+
+  "free": "Free",
+  "@free": {
+    "description": "Free price label"
+  },
+
+  "premium": "Premium",
+  "@premium": {
+    "description": "Premium label"
+  },
+
+  "subscription": "Subscription",
+  "@subscription": {
+    "description": "Subscription label"
+  },
+
+  "subscribe": "Subscribe",
+  "@subscribe": {
+    "description": "Subscribe button text"
+  },
+
+  "subscriptionPlans": "Subscription Plans",
+  "@subscriptionPlans": {
+    "description": "Subscription plans label"
+  },
+
+  "monthly": "Monthly",
+  "@monthly": {
+    "description": "Monthly subscription option"
+  },
+
+  "annual": "Annual",
+  "@annual": {
+    "description": "Annual subscription option"
+  },
+
+  "loading": "Loading...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+
+  "pullToRefresh": "Pull to refresh",
+  "@pullToRefresh": {
+    "description": "Pull to refresh hint text"
+  },
+
+  "releaseToRefresh": "Release to refresh",
+  "@releaseToRefresh": {
+    "description": "Release to refresh hint text"
+  },
+
+  "refreshing": "Refreshing...",
+  "@refreshing": {
+    "description": "Refreshing indicator text"
+  }
+}

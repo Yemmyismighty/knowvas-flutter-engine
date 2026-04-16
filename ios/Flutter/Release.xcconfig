@@ -1,0 +1,31 @@
+#include "Generated.xcconfig"
+
+// Release-specific build settings
+FLUTTER_BUILD_MODE=release
+
+// Optimization
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+ENABLE_TESTABILITY = NO
+GCC_OPTIMIZATION_LEVEL = s
+SWIFT_OPTIMIZATION_LEVEL = -O
+
+// Strip debug symbols
+STRIP_INSTALLED_PRODUCT = YES
+COPY_PHASE_STRIP = YES
+STRIP_STYLE = non-global
+
+// Compiler flags
+SWIFT_COMPILATION_MODE = wholemodule
+
+// Code signing (configure for distribution)
+CODE_SIGN_IDENTITY = Apple Distribution
+CODE_SIGN_STYLE = Manual
+
+// Deployment target
+IPHONEOS_DEPLOYMENT_TARGET = 14.0
+
+// Bitcode (deprecated but kept for reference)
+ENABLE_BITCODE = NO
+
+// Swift settings
+SWIFT_INSTALL_OBJC_HEADER = NO

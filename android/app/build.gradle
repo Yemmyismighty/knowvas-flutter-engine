@@ -1,0 +1,155 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+// Load keystore properties from file if it exists
+def keystorePropertiesFile = rootProject.file("key.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+    namespace = "com.knowvas.app"
+    compileSdk = 35
+    ndkVersion = "27.0.12077973"
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled = true
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    defaultConfig {
+        applicationId = "com.knowvas.app"
+        minSdk = 24
+        targetSdk = 35
+        
+        // Version configuration - can be overridden by environment variables
+        versionCode = (System.getenv("VERSION_CODE") ?: flutter.versionCode).toInteger()
+        versionName = System.getenv("VERSION_NAME") ?: flutter.versionName
+        
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Build config fields for different environments
+        buildConfigField "String", "API_BASE_URL", "\"https://api.knowvas.com\""
+    }
+
+    signingConfigs {
+        release {
+            // Use environment variables for CI/CD, fall back to key.properties for local builds
+            if (System.getenv("KEYSTORE_FILE")) {
+                storeFile file(System.getenv("KEYSTORE_FILE"))
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            } else if (keystoreProperties['storeFile']) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            } else {
+                // Fall back to debug signing for development
+                storeFile file("debug.keystore")
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
+        
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            signingConfig signingConfigs.debug
+            
+            // Debug-specific build config
+            buildConfigField "String", "API_BASE_URL", "\"https://dev-api.knowvas.com\""
+            buildConfigField "boolean", "ENABLE_LOGGING", "true"
+        }
+        
+        release {
+            signingConfig signingConfigs.release
+            
+            // Enable code shrinking, obfuscation, and optimization
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            
+            // Release-specific build config
+            buildConfigField "boolean", "ENABLE_LOGGING", "false"
+            
+            // Disable debugging
+            debuggable false
+        }
+        
+        profile {
+            initWith debug
+            debuggable false
+            signingConfig signingConfigs.release
+            buildConfigField "boolean", "ENABLE_LOGGING", "true"
+        }
+    }
+    
+    // Product flavors removed for simplified builds
+    // Re-add when needed for multi-environment deployment
+
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+
+    // Kotlin Coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+
+    // AndroidX Core
+    implementation "androidx.core:core-ktx:1.12.0"
+    implementation "androidx.appcompat:appcompat:1.6.1"
+    implementation "androidx.fragment:fragment-ktx:1.6.2"
+
+    // Readium Mobile Android
+    implementation "org.readium.kotlin-toolkit:readium-shared:2.4.0"
+    implementation "org.readium.kotlin-toolkit:readium-streamer:2.4.0"
+    implementation "org.readium.kotlin-toolkit:readium-navigator:2.4.0"
+
+    // Image loading library (Coil)
+    implementation "io.coil-kt:coil:2.5.0"
+
+    // Lifecycle components
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.6.2"
+
+    // Testing dependencies
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.mockito:mockito-core:5.3.1"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
+
+    // Android instrumented tests
+    androidTestImplementation "androidx.test.ext:junit:1.1.5"
+    androidTestImplementation "androidx.test:runner:1.5.2"
+    androidTestImplementation "androidx.test:rules:1.5.0"
+    androidTestImplementation "androidx.test.espresso:espresso-core:3.5.1"
+    androidTestImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3"
+}

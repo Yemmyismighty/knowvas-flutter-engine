@@ -1,0 +1,28 @@
+#include "Generated.xcconfig"
+
+// Profile-specific build settings (for performance testing)
+FLUTTER_BUILD_MODE=profile
+
+// Optimization with debug symbols
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+ENABLE_TESTABILITY = YES
+GCC_OPTIMIZATION_LEVEL = s
+SWIFT_OPTIMIZATION_LEVEL = -O
+
+// Keep some debugging capability
+STRIP_INSTALLED_PRODUCT = NO
+COPY_PHASE_STRIP = NO
+
+// Compiler flags
+SWIFT_COMPILATION_MODE = wholemodule
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = PROFILE
+
+// Code signing (use automatic for profile)
+CODE_SIGN_IDENTITY = Apple Development
+CODE_SIGN_STYLE = Automatic
+
+// Deployment target
+IPHONEOS_DEPLOYMENT_TARGET = 14.0
+
+// Bitcode
+ENABLE_BITCODE = NO

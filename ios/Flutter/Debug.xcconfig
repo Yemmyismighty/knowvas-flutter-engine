@@ -1,0 +1,21 @@
+#include "Generated.xcconfig"
+
+// Debug-specific build settings
+FLUTTER_BUILD_MODE=debug
+
+// Enable debugging
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+ENABLE_TESTABILITY = YES
+GCC_OPTIMIZATION_LEVEL = 0
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+
+// Compiler flags
+GCC_PREPROCESSOR_DEFINITIONS = DEBUG=1 $(inherited)
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+
+// Code signing (use automatic for debug)
+CODE_SIGN_IDENTITY = Apple Development
+CODE_SIGN_STYLE = Automatic
+
+// Deployment target
+IPHONEOS_DEPLOYMENT_TARGET = 14.0

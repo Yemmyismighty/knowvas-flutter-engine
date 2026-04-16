@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Knowvas (Production)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "--dart-define=API_BASE_URL=https://backend.knowvas.com"
+            ]
+        },
+        {
+            "name": "Knowvas (Local)",
+            "request": "launch",
+            "type": "dart",
+            "args": [
+                "--dart-define=API_BASE_URL=http://10.0.2.2:5000"
+            ]
+        }
+    ]
+}

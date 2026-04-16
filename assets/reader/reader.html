@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Knowvas Reader</title>
+
+    <!-- DearFlip CSS - LOCAL ASSETS -->
+    <link rel="stylesheet" href="dflip/css/dflip.min.css">
+    <link rel="stylesheet" href="dflip/css/themify-icons.min.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #f3ecff;
+        }
+
+        #reader-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: #f3ecff;
+            z-index: 9999;
+        }
+
+        #loading.hidden {
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #e8d5ff;
+            border-top-color: #9D4EDD;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 16px;
+            color: #7a2fc4;
+            font-size: 16px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 20px;
+            color: #7a2fc4;
+        }
+
+        /* DearFlip Branding - Brand color palette */
+        .df-ui-wrapper,
+        .df-ui-btn {
+            background-color: #e8d5ff !important;
+            color: #5a1a99 !important;
+        }
+
+        .df-ui-btn:hover {
+            color: #fff !important;
+            background-color: #9D4EDD !important;
+        }
+
+        .df-ui-btn.df-active {
+            color: #fff !important;
+            background-color: #7a2fc4 !important;
+        }
+
+        .df-ui-page {
+            background-color: #f3ecff !important;
+        }
+
+        .df-ui-page input {
+            border-color: #9D4EDD !important;
+            background-color: #faf8ff !important;
+            color: #5a1a99 !important;
+        }
+
+        .df-ui-page input:focus {
+            background-color: #f3ecff !important;
+            border-color: #7a2fc4 !important;
+        }
+
+        .df-ui-page label {
+            color: #7a2fc4 !important;
+        }
+
+        /* Hide download button */
+        .df-ui-download {
+            display: none !important;
+        }
+
+        /* Remove circular background from navigation arrows */
+        .df-ui-btn {
+            background: transparent !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+
+        /* Page background */
+        .df-page-front,
+        .df-page-back {
+            background-color: #faf8ff !important;
+        }
+
+        .df-container {
+            background-color: #f3ecff !important;
+        }
+
+        .df-book-stage {
+            background-color: #f3ecff !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading reader...</div>
+    </div>
+
+    <div id="reader-container"></div>
+
+    <!-- jQuery (required for DearFlip) - LOCAL ASSET -->
+    <script src="dflip/js/libs/jquery.min.js"></script>
+
+    <!-- DearFlip - LOCAL ASSET -->
+    <script src="dflip/js/dflip.min.js"></script>
+
+    <!-- EPUB.js - LOCAL ASSET -->
+    <!-- Download from: https://github.com/futurepress/epub.js/releases -->
+    <!-- Place epub.min.js in assets/reader/epubjs/ directory -->
+    <script src="epubjs/epub.min.js"></script>
+
+    <script>
+        // Bridge between Flutter and JavaScript
+        window.readerBridge = {
+            reader: null,
+            contentType: null,
+            contentId: null,
+
+            // Handle commands from Flutter
+            handleCommand: function (command, params) {
+                console.log('📥 Received command:', command, params);
+
+                try {
+                    const parsedParams = typeof params === 'string' ? JSON.parse(params) : params;
+
+                    switch (command) {
+                        case 'loadContent':
+                            this.loadContent(parsedParams);
+                            break;
+                        case 'navigateTo':
+                            this.navigateTo(parsedParams.location);
+                            break;
+                        case 'updateSettings':
+                            this.updateSettings(parsedParams);
+                            break;
+                        default:
+                            console.warn('Unknown command:', command);
+                    }
+                } catch (e) {
+                    console.error('Error handling command:', e);
+                    this.sendError('Command error: ' + e.message);
+                }
+            },
+
+            // Load content
+            loadContent: function (params) {
+                const { url, contentId, contentType } = params;
+                console.log('📖 Loading content:', contentId, contentType);
+
+                this.contentId = contentId;
+                this.contentType = contentType;
+
+                // Show loading
+                document.getElementById('loading').classList.remove('hidden');
+
+                // Load appropriate reader
+                if (contentType === 'epub' || contentType === 'book') {
+                    this.loadEpubReader(url, contentId);
+                } else {
+                    this.loadPdfReader(url, contentId);
+                }
+            },
+
+            // Load EPUB reader (EPUB.js)
+            loadEpubReader: function (url, contentId) {
+                console.log('📚 Loading EPUB reader with EPUB.js');
+                console.log('EPUB URL:', url);
+
+                try {
+                    // Check if EPUB.js is loaded
+                    if (typeof ePub === 'undefined') {
+                        console.error('❌ EPUB.js not loaded');
+                        document.getElementById('loading').classList.add('hidden');
+                        document.getElementById('reader-container').innerHTML = `
+                            <div class="error-message">
+                                <h1>EPUB Reader Error</h1>
+                                <p>EPUB.js library not found.</p>
+                                <p style="margin-top: 20px; font-size: 14px;">
+                                    Please download epub.min.js from GitHub and place it in assets/reader/epubjs/
+                                </p>
+                                <p style="margin-top: 10px; font-size: 12px; color: #999;">
+                                    See assets/reader/epubjs/README.md for instructions
+                                </p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // Clear container
+                    const container = document.getElementById('reader-container');
+                    container.innerHTML = '';
+
+                    // Create EPUB book instance
+                    const book = ePub(url);
+
+                    // Render to container
+                    const rendition = book.renderTo(container, {
+                        width: '100%',
+                        height: '100%',
+                        spread: 'none', // Single page view for mobile
+                        flow: 'paginated', // Paginated instead of scrolled
+                    });
+
+                    // Display the book
+                    rendition.display();
+
+                    // Store references
+                    this.reader = {
+                        book: book,
+                        rendition: rendition,
+                        contentId: contentId
+                    };
+
+                    // Hide loading
+                    document.getElementById('loading').classList.add('hidden');
+
+                    // Generate locations for progress tracking
+                    book.ready.then(() => {
+                        return book.locations.generate(1024); // Generate CFI locations
+                    }).then(() => {
+                        console.log('✅ EPUB locations generated');
+                        this.startEpubProgressTracking();
+                    });
+
+                    // Handle navigation
+                    rendition.on('relocated', (location) => {
+                        console.log('📖 EPUB relocated:', location.start.cfi);
+                        this.sendNavigation(location.start.cfi);
+                    });
+
+                    // Handle errors
+                    rendition.on('error', (error) => {
+                        console.error('❌ EPUB rendering error:', error);
+                        this.sendError('EPUB rendering error: ' + error.message);
+                    });
+
+                    // Add touch navigation
+                    rendition.on('click', (event) => {
+                        const x = event.clientX;
+                        const width = window.innerWidth;
+
+                        // Left third = previous page
+                        if (x < width / 3) {
+                            rendition.prev();
+                        }
+                        // Right third = next page
+                        else if (x > (width * 2 / 3)) {
+                            rendition.next();
+                        }
+                        // Middle third = show/hide controls (future feature)
+                    });
+
+                    console.log('✅ EPUB reader initialized');
+
+                } catch (e) {
+                    console.error('❌ Error loading EPUB reader:', e);
+                    this.sendError('Failed to load EPUB reader: ' + e.message);
+                    document.getElementById('loading').classList.add('hidden');
+                }
+            },
+
+            // Start progress tracking for EPUB
+            startEpubProgressTracking: function () {
+                if (!this.reader || !this.reader.book) return;
+
+                let lastCfi = '';
+                let timeOnPage = 0;
+
+                setInterval(() => {
+                    try {
+                        const rendition = this.reader.rendition;
+                        const book = this.reader.book;
+
+                        if (!rendition || !book.locations) return;
+
+                        const currentLocation = rendition.currentLocation();
+                        if (!currentLocation || !currentLocation.start) return;
+
+                        const currentCfi = currentLocation.start.cfi;
+
+                        // Track time on page
+                        if (lastCfi === '') {
+                            lastCfi = currentCfi;
+                        }
+
+                        if (currentCfi === lastCfi) {
+                            timeOnPage += 1;
+                        } else {
+                            // Page changed, send progress
+                            if (timeOnPage >= 5) { // Only track if spent 5+ seconds
+                                const progress = book.locations.percentageFromCfi(currentCfi);
+                                const totalPages = book.locations.total;
+                                const currentPage = book.locations.locationFromCfi(currentCfi);
+
+                                this.sendProgress({
+                                    contentId: this.contentId,
+                                    currentLocation: currentCfi,
+                                    previousLocation: lastCfi,
+                                    currentPage: currentPage,
+                                    totalPages: totalPages,
+                                    timeOnPage: timeOnPage,
+                                    progress: progress,
+                                });
+                            }
+
+                            lastCfi = currentCfi;
+                            timeOnPage = 0;
+                        }
+                    } catch (e) {
+                        console.error('EPUB progress tracking error:', e);
+                    }
+                }, 1000);
+            },
+
+            // Load PDF reader (DearFlip)
+            loadPdfReader: function (url, contentId) {
+                console.log('📄 Loading PDF reader with DearFlip');
+                console.log('PDF URL:', url);
+
+                try {
+                    // Create flipbook element
+                    const flipbookDiv = document.createElement('div');
+                    flipbookDiv.className = '_df_book';
+                    flipbookDiv.id = 'pdf_flipbook';
+                    flipbookDiv.setAttribute('source', url);
+                    flipbookDiv.setAttribute('height', window.innerHeight);
+                    flipbookDiv.setAttribute('webgl', 'true');
+                    flipbookDiv.style.width = '100%';
+                    flipbookDiv.style.height = '100%';
+
+                    // Clear container and add flipbook
+                    const container = document.getElementById('reader-container');
+                    container.innerHTML = '';
+                    container.appendChild(flipbookDiv);
+
+                    // Wait for DearFlip to initialize
+                    setTimeout(() => {
+                        console.log('✅ DearFlip initialized');
+                        document.getElementById('loading').classList.add('hidden');
+
+                        // Start progress tracking
+                        this.startProgressTracking();
+                    }, 2000);
+
+                } catch (e) {
+                    console.error('❌ Error loading PDF reader:', e);
+                    this.sendError('Failed to load PDF reader: ' + e.message);
+                    document.getElementById('loading').classList.add('hidden');
+                }
+            },
+
+            // Start progress tracking for PDF
+            startProgressTracking: function () {
+                let lastPage = 0;
+                let timeOnPage = 0;
+
+                setInterval(() => {
+                    try {
+                        const pageLabel = document.querySelector('.df-ui-page label');
+                        if (!pageLabel) return;
+
+                        const match = pageLabel.textContent.match(/(\d+)\/(\d+)/);
+                        if (!match) return;
+
+                        const currentPage = parseInt(match[1]);
+                        const totalPages = parseInt(match[2]);
+
+                        // Track time on page
+                        if (lastPage === 0) {
+                            lastPage = currentPage;
+                        }
+
+                        if (currentPage === lastPage) {
+                            timeOnPage += 1;
+                        } else {
+                            // Page changed, send progress
+                            if (timeOnPage >= 5) { // Only track if spent 5+ seconds
+                                this.sendProgress({
+                                    contentId: this.contentId,
+                                    currentPage: currentPage,
+                                    previousPage: lastPage,
+                                    totalPages: totalPages,
+                                    timeOnPage: timeOnPage,
+                                    progress: currentPage / totalPages,
+                                });
+                            }
+
+                            lastPage = currentPage;
+                            timeOnPage = 0;
+                        }
+                    } catch (e) {
+                        console.error('Progress tracking error:', e);
+                    }
+                }, 1000);
+            },
+
+            // Navigate to location
+            navigateTo: function (location) {
+                console.log('🧭 Navigate to:', location);
+                // TODO: Implement navigation based on reader type
+            },
+
+            // Update settings
+            updateSettings: function (settings) {
+                console.log('⚙️ Update settings:', settings);
+                // TODO: Implement settings update
+            },
+
+            // Send progress to Flutter
+            sendProgress: function (data) {
+                console.log('📊 Sending progress:', data);
+                if (window.flutter_inappwebview) {
+                    window.flutter_inappwebview.callHandler('onProgress', data);
+                }
+            },
+
+            // Send navigation event to Flutter
+            sendNavigation: function (location) {
+                if (window.flutter_inappwebview) {
+                    window.flutter_inappwebview.callHandler('onNavigate', location);
+                }
+            },
+
+            // Send error to Flutter
+            sendError: function (error) {
+                console.error('❌ Error:', error);
+                if (window.flutter_inappwebview) {
+                    window.flutter_inappwebview.callHandler('onError', error);
+                }
+            }
+        };
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', function () {
+            console.log('✅ Reader HTML loaded');
+            console.log('jQuery loaded:', typeof $ !== 'undefined');
+            console.log('DearFlip loaded:', typeof window.DFLIP !== 'undefined');
+        });
+    </script>
+</body>
+
+</html>

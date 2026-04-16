@@ -1,0 +1,435 @@
+package com.knowvas.reader.epub
+
+import android.content.Context
+import android.media.MediaPlayer
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.Locator
+import java.io.IOException
+
+/**
+ * Handles audio playback for EPUB media overlays
+ * Supports play, pause, seek, and text synchronization
+ */
+class EpubAudioPlayer(
+    private val context: Context,
+    private val sessionId: String,
+    private val eventEmitter: (Map<String, Any>) -> Unit
+) {
+    private var mediaPlayer: MediaPlayer? = null
+    private var publication: Publication? = null
+    private var currentLocator: Locator? = null
+    private var playingState = false
+    private var preparedState = false
+    private var currentAudioUrl: String? = null
+    
+    // Coroutine scope for progress tracking
+    private val coroutineScope = CoroutineScope(Dispatchers.Main)
+    private var progressJob: Job? = null
+    
+    // Audio playback state
+    private var audioaudioDuration: Int = 0
+    private var currentPosition: Int = 0
+    
+    companion object {
+        private const val TAG = "EpubAudioPlayer"
+        private const val PROGRESS_UPDATE_INTERVAL = 100L // milliseconds
+    }
+    
+    /**
+     * Initialize audio player with publication
+     */
+    fun initialize(publication: Publication) {
+        this.publication = publication
+        Log.d(TAG, "Audio player initialized for session: $sessionId")
+    }
+    
+    /**
+     * Check if the current locator has associated audio (media overlay)
+     */
+    fun hasAudio(locator: Locator): Boolean {
+        // Check if the locator's resource has media overlay
+        val link = publication?.readingOrder?.find { it.href == locator.href }
+        
+        // Media overlays are typically indicated by properties or alternate links
+        val hasMediaOverlay = link?.properties?.get("media-overlay") != null
+        val hasAudioAlternate = link?.alternates?.any { it.type?.contains("audio") == true } == true
+        
+        return hasMediaOverlay || hasAudioAlternate
+    }
+    
+    /**
+     * Load audio for a specific locator
+     */
+    fun loadAudio(locator: Locator, audioUrl: String) {
+        try {
+            // Release previous media player if exists
+            release()
+            
+            currentLocator = locator
+            currentAudioUrl = audioUrl
+            
+            // Create new media player
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(audioUrl)
+                
+                setOnPreparedListener { player ->
+                    preparedState = true
+                    audioDuration = player.duration
+                    Log.d(TAG, "Audio prepared: audioDuration=$audioDuration ms")
+                    
+                    emitAudioReadyEvent()
+                }
+                
+                setOnCompletionListener {
+                    playingState = false
+                    stopProgressTracking()
+                    emitAudioCompletedEvent()
+                    Log.d(TAG, "Audio playback completed")
+                }
+                
+                setOnErrorListener { _, what, extra ->
+                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
+                    emitAudioErrorEvent("PLAYBACK_ERROR", "Audio playback failed: $what")
+                    true
+                }
+                
+                prepareAsync()
+            }
+            
+            Log.d(TAG, "Loading audio from: $audioUrl")
+            
+        } catch (e: IOException) {
+            Log.e(TAG, "Error loading audio", e)
+            emitAudioErrorEvent("LOAD_ERROR", "Failed to load audio: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error loading audio", e)
+            emitAudioErrorEvent("LOAD_ERROR", "Unexpected error: ${e.message}")
+        }
+    }
+    
+    /**
+     * Play audio
+     */
+    fun play() {
+        if (!preparedState) {
+            Log.w(TAG, "Cannot play: audio not prepared")
+            return
+        }
+        
+        try {
+            mediaPlayer?.let { player ->
+                if (!playingState) {
+                    player.start()
+                    playingState = true
+                    startProgressTracking()
+                    emitAudioPlayEvent()
+                    Log.d(TAG, "Audio playback started")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting playback", e)
+            emitAudioErrorEvent("PLAYBACK_ERROR", "Failed to start playback: ${e.message}")
+        }
+    }
+    
+    /**
+     * Pause audio
+     */
+    fun pause() {
+        try {
+            mediaPlayer?.let { player ->
+                if (playingState && player.isPlaying) {
+                    player.pause()
+                    playingState = false
+                    stopProgressTracking()
+                    emitAudioPauseEvent()
+                    Log.d(TAG, "Audio playback paused")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error pausing playback", e)
+            emitAudioErrorEvent("PLAYBACK_ERROR", "Failed to pause playback: ${e.message}")
+        }
+    }
+    
+    /**
+     * Toggle play/pause
+     */
+    fun togglePlayPause() {
+        if (playingState) {
+            pause()
+        } else {
+            play()
+        }
+    }
+    
+    /**
+     * Seek to position in milliseconds
+     */
+    fun seekTo(positionMs: Int) {
+        if (!preparedState) {
+            Log.w(TAG, "Cannot seek: audio not prepared")
+            return
+        }
+        
+        try {
+            mediaPlayer?.let { player ->
+                val seekPosition = positionMs.coerceIn(0, audioDuration)
+                player.seekTo(seekPosition)
+                currentPosition = seekPosition
+                emitAudioSeekEvent(seekPosition)
+                Log.d(TAG, "Seeked to position: $seekPosition ms")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error seeking", e)
+            emitAudioErrorEvent("SEEK_ERROR", "Failed to seek: ${e.message}")
+        }
+    }
+    
+    /**
+     * Get current playback position in milliseconds
+     */
+    fun getCurrentPosition(): Int {
+        return try {
+            mediaPlayer?.currentPosition ?: 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting current position", e)
+            0
+        }
+    }
+    
+    /**
+     * Get audio audioDuration in milliseconds
+     */
+    fun getDuration(): Int {
+        return audioDuration
+    }
+    
+    /**
+     * Check if audio is currently playing
+     */
+    fun isPlaying(): Boolean {
+        return playingState && (mediaPlayer?.isPlaying == true)
+    }
+    
+    /**
+     * Get playback progress as percentage (0.0 to 1.0)
+     */
+    fun getProgress(): Double {
+        if (audioDuration == 0) return 0.0
+        return getCurrentPosition().toDouble() / audioDuration.toDouble()
+    }
+    
+    /**
+     * Set playback speed (0.5 to 2.0)
+     */
+    fun setPlaybackSpeed(speed: Float) {
+        if (!preparedState) {
+            Log.w(TAG, "Cannot set speed: audio not prepared")
+            return
+        }
+        
+        try {
+            mediaPlayer?.let { player ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    val playbackParams = player.playbackParams
+                    playbackParams.speed = speed.coerceIn(0.5f, 2.0f)
+                    player.playbackParams = playbackParams
+                    Log.d(TAG, "Playback speed set to: $speed")
+                } else {
+                    Log.w(TAG, "Playback speed control not supported on this Android version")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting playback speed", e)
+        }
+    }
+    
+    /**
+     * Release media player resources
+     */
+    fun release() {
+        try {
+            stopProgressTracking()
+            
+            mediaPlayer?.let { player ->
+                if (player.isPlaying) {
+                    player.stop()
+                }
+                player.reset()
+                player.release()
+            }
+            
+            mediaPlayer = null
+            preparedState = false
+            playingState = false
+            currentPosition = 0
+            audioDuration = 0
+            currentAudioUrl = null
+            
+            Log.d(TAG, "Audio player released")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing media player", e)
+        }
+    }
+    
+    // ========== Progress Tracking ==========
+    
+    /**
+     * Start tracking playback progress
+     */
+    private fun startProgressTracking() {
+        stopProgressTracking()
+        
+        progressJob = coroutineScope.launch {
+            while (isActive && playingState) {
+                try {
+                    currentPosition = getCurrentPosition()
+                    emitAudioProgressEvent(currentPosition, audioDuration)
+                    
+                    // Check for text synchronization points
+                    checkTextSynchronization(currentPosition)
+                    
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in progress tracking", e)
+                }
+                
+                delay(PROGRESS_UPDATE_INTERVAL)
+            }
+        }
+    }
+    
+    /**
+     * Stop tracking playback progress
+     */
+    private fun stopProgressTracking() {
+        progressJob?.cancel()
+        progressJob = null
+    }
+    
+    /**
+     * Check if we need to highlight text based on current audio position
+     * This is where media overlay synchronization would happen
+     */
+    private fun checkTextSynchronization(positionMs: Int) {
+        // In a full implementation, this would:
+        // 1. Look up the media overlay data for the current locator
+        // 2. Find which text fragment corresponds to the current audio position
+        // 3. Emit an event to highlight that text fragment
+        
+        // For now, we emit a generic sync event
+        // The actual implementation would require parsing SMIL files or
+        // using Readium's media overlay API
+        
+        // Example of what the event would look like:
+        // emitTextSyncEvent(fragmentId, startTime, endTime)
+    }
+    
+    // ========== Event Emission ==========
+    
+    private fun emitAudioReadyEvent() {
+        val event = mapOf(
+            "type" to "audio_ready",
+            "session_id" to sessionId,
+            "audioDuration" to audioDuration,
+            "audio_url" to (currentAudioUrl ?: ""),
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+    
+    private fun emitAudioPlayEvent() {
+        val event = mapOf(
+            "type" to "engagement",
+            "session_id" to sessionId,
+            "event" to "audio_play",
+            "position" to currentPosition,
+            "audioDuration" to audioDuration,
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+    
+    private fun emitAudioPauseEvent() {
+        val event = mapOf(
+            "type" to "engagement",
+            "session_id" to sessionId,
+            "event" to "audio_pause",
+            "position" to currentPosition,
+            "audioDuration" to audioDuration,
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+    
+    private fun emitAudioSeekEvent(position: Int) {
+        val event = mapOf(
+            "type" to "engagement",
+            "session_id" to sessionId,
+            "event" to "audio_seek",
+            "position" to position,
+            "audioDuration" to audioDuration,
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+    
+    private fun emitAudioProgressEvent(position: Int, audioDuration: Int) {
+        val event = mapOf(
+            "type" to "audio_progress",
+            "session_id" to sessionId,
+            "position" to position,
+            "audioDuration" to audioDuration,
+            "progress" to getProgress(),
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+    
+    private fun emitAudioCompletedEvent() {
+        val event = mapOf(
+            "type" to "engagement",
+            "session_id" to sessionId,
+            "event" to "audio_completed",
+            "audioDuration" to audioDuration,
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+    
+    private fun emitAudioErrorEvent(code: String, message: String) {
+        val event = mapOf(
+            "type" to "error",
+            "session_id" to sessionId,
+            "code" to code,
+            "message" to message,
+            "context" to "audio_playback",
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+    
+    /**
+     * Emit text synchronization event for highlighting
+     */
+    private fun emitTextSyncEvent(fragmentId: String, startTime: Int, endTime: Int) {
+        val event = mapOf(
+            "type" to "audio_text_sync",
+            "session_id" to sessionId,
+            "fragment_id" to fragmentId,
+            "start_time" to startTime,
+            "end_time" to endTime,
+            "timestamp" to System.currentTimeMillis()
+        )
+        eventEmitter(event)
+    }
+}
+
