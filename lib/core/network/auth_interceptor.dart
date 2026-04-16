@@ -3,9 +3,10 @@ import 'package:logger/logger.dart';
 
 import '../constants/storage_keys.dart';
 import '../security/secure_storage.dart';
+import '../services/device_service.dart';
 
-/// Interceptor for automatic JWT token injection
-/// Adds access token to request headers and handles token refresh on 401
+/// Interceptor for automatic JWT token injection and device identification.
+/// Adds access token + X-Device-ID to every request.
 class AuthInterceptor extends Interceptor {
   AuthInterceptor({
     required SecureStorage secureStorage,
@@ -25,7 +26,11 @@ class AuthInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     try {
-      // Skip token injection for auth endpoints
+      // Always attach the stable device ID so the backend can track this device
+      final deviceId = await DeviceService.instance.getDeviceId();
+      options.headers['X-Device-ID'] = deviceId;
+
+      // Skip token injection for public auth endpoints
       if (_isAuthEndpoint(options.path)) {
         return handler.next(options);
       }
@@ -36,7 +41,6 @@ class AuthInterceptor extends Interceptor {
       );
 
       if (accessToken != null && accessToken.isNotEmpty) {
-        // Add Bearer token to Authorization header
         options.headers['Authorization'] = 'Bearer $accessToken';
         _logger.d('Added access token to request: ${options.path}');
       } else {

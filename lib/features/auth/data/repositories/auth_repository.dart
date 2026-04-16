@@ -9,6 +9,7 @@ import '../../../../core/errors/exceptions.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/security/secure_storage.dart';
+import '../../../../core/services/device_service.dart';
 import '../../../../shared/models/auth_response.dart';
 import '../../../../shared/models/reading_stats.dart';
 import '../../../../shared/models/user.dart';
@@ -41,7 +42,8 @@ class AuthRepository {
         data: {
           'email': email,
           'password': password,
-          'use_jwt': true, // Request JWT tokens for mobile
+          'use_jwt': true,
+          'deviceName': await DeviceService.instance.getDeviceName(),
         },
       );
 
@@ -718,8 +720,63 @@ class AuthRepository {
     ]);
   }
 
-  /// Complete user profile with DOB, gender, and city
-  /// Matches web app's /api/auth/complete-profile endpoint
+  /// Sign in / sign up with Google ID token
+  /// Sends the Google idToken to the backend which verifies it and returns JWT tokens
+  Future<AuthResponse> googleSignIn({
+    required String idToken,
+    String deviceName = 'Mobile Device',
+  }) async {
+    try {
+      // Get the real device name from hardware
+      final realDeviceName = await DeviceService.instance.getDeviceName();
+
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        ApiConstants.googleLogin,
+        data: {
+          'idToken': idToken,
+          'deviceName': realDeviceName,
+        },
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final authResponse = AuthResponse.fromJson(response.data!);
+
+        await _storeTokens(
+          accessToken: authResponse.accessToken,
+          refreshToken: authResponse.refreshToken,
+          userId: authResponse.user.id,
+        );
+        await _storeUserData(authResponse.user);
+
+        return authResponse;
+      }
+
+      final data = response.data;
+      String errorMessage = 'Google sign in failed';
+
+      if (data is Map<String, dynamic>) {
+        errorMessage = data['error'] as String? ?? data['message'] as String? ?? errorMessage;
+
+        if (response.statusCode == 403 && data['manage_devices'] == true) {
+          final token = data['device_management_token'] as String? ?? '';
+          throw DeviceLimitFailure(token);
+        }
+      }
+
+      throw AuthFailure(errorMessage, code: 'GOOGLE_SIGN_IN_FAILED');
+    } on Failure {
+      rethrow;
+    } on NetworkException catch (e) {
+      throw NetworkFailure(e.message, code: e.code);
+    } on ServerException catch (e) {
+      throw ServerFailure(e.message, statusCode: e.statusCode, code: e.code);
+    } catch (e) {
+      if (e is AuthFailure || e is NetworkFailure || e is ServerFailure || e is DeviceLimitFailure) rethrow;
+      throw AuthFailure('An unexpected error occurred during Google sign in: $e', code: 'UNKNOWN_ERROR');
+    }
+  }
+
+  /// Complete user profile with DOB, gender, and city  /// Matches web app's /api/auth/complete-profile endpoint
   Future<void> completeProfile({
     required String dateOfBirth,
     required String gender,

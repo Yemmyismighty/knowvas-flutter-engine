@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/errors/failures.dart';
+import '../../../../core/services/google_auth_service.dart';
 import '../../../../core/services/push_notification_service.dart';
 import '../../../../shared/models/auth_response.dart';
 import '../../../../shared/models/user.dart';
@@ -100,6 +101,48 @@ class Auth extends _$Auth {
       // If initialization fails, assume unauthenticated
       debugPrint('⚠️ Auth initialization error: $e');
       state = AuthState.unauthenticated();
+    }
+  }
+
+  /// Sign in with Google
+  /// Gets Google ID token natively, sends to backend, authenticates user
+  Future<void> googleSignIn() async {
+    state = state.copyWithLoading();
+
+    try {
+      // Step 1: get the Google ID token from the device
+      final idToken = await GoogleAuthService.getIdToken();
+      if (idToken == null) {
+        // User cancelled the Google sign-in dialog — just reset, no error
+        state = AuthState.unauthenticated();
+        return;
+      }
+
+      debugPrint('🔵 Google Sign-In: sending idToken to backend');
+
+      // Step 2: send the token to our backend
+      final repository = ref.read<AuthRepository>(authRepositoryProvider);
+      final authResponse = await repository.googleSignIn(
+        idToken: idToken,
+        deviceName: 'Mobile Device',
+      );
+
+      debugPrint('✅ Google Sign-In: backend success, user=${authResponse.user.email}');
+      state = AuthState.authenticated(authResponse.user);
+    } on DeviceLimitFailure catch (e) {
+      state = AuthState.deviceLimitReached(e.deviceManagementToken);
+    } on AuthFailure catch (e) {
+      debugPrint('❌ Google Sign-In AuthFailure: ${e.message}');
+      state = state.copyWithError(e.message);
+    } on NetworkFailure catch (e) {
+      debugPrint('❌ Google Sign-In NetworkFailure: ${e.message}');
+      state = state.copyWithError(e.message);
+    } on ServerFailure catch (e) {
+      debugPrint('❌ Google Sign-In ServerFailure: ${e.message}');
+      state = state.copyWithError(e.message);
+    } catch (e) {
+      debugPrint('❌ Google Sign-In unexpected error: $e');
+      state = state.copyWithError(e.toString());
     }
   }
 

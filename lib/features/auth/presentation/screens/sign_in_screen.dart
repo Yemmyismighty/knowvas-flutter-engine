@@ -1,11 +1,14 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../../shared/widgets/reveal_animation.dart';
 import '../providers/auth_provider.dart';
+import '_auth_shared.dart';
+
+// ─── Screen shell ─────────────────────────────────────────────────────────────
 
 class SignInScreen extends ConsumerWidget {
   const SignInScreen({super.key});
@@ -14,48 +17,39 @@ class SignInScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppTheme.brand50, Colors.white, AppTheme.brand50.withOpacity(0.3)],
+            colors: [Color(0xFF3D0F6B), Color(0xFF6B21A8), Color(0xFF9D4EDD)],
           ),
         ),
         child: Stack(
           children: [
-            Positioned(
-              top: -100, right: -100,
-              child: Container(
-                width: 300, height: 300,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [AppTheme.brand400.withOpacity(0.15), AppTheme.brand600.withOpacity(0.15)]),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: -100, left: -100,
-              child: Container(
-                width: 300, height: 300,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [AppTheme.brand600.withOpacity(0.15), AppTheme.brand800.withOpacity(0.15)]),
-                ),
-              ),
-            ),
+            const AuthBgOrbs(),
             SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 450),
-                    // RevealAnimation wraps a const-keyed widget so it never restarts
-                    child: const RevealAnimation(
-                      key: ValueKey('signin'),
-                      child: _SignInForm(),
+              child: Column(
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 4),
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 20),
+                        onPressed: () => context.go('/landing'),
+                      ),
                     ),
                   ),
-                ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 450),
+                        child: const _SignInForm(key: ValueKey('signin-form')),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -65,281 +59,314 @@ class SignInScreen extends ConsumerWidget {
   }
 }
 
-/// Extracted into its own ConsumerStatefulWidget so ref.watch is isolated here
-/// and doesn't cause SignInScreen (and RevealAnimation) to rebuild.
-class _SignInForm extends ConsumerStatefulWidget {
-  const _SignInForm();
+// ─── Form ─────────────────────────────────────────────────────────────────────
 
+class _SignInForm extends ConsumerStatefulWidget {
+  const _SignInForm({super.key});
   @override
   ConsumerState<_SignInForm> createState() => _SignInFormState();
 }
 
-class _SignInFormState extends ConsumerState<_SignInForm> {
+class _SignInFormState extends ConsumerState<_SignInForm>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _rememberMe = false;
-  bool _isLoading = false;
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _obscure = true;
+  bool _loading = false;
+  late final AnimationController _entryCtrl;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _entryCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 550));
+    _fade = CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
+    _slide = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOutCubic));
+    _entryCtrl.forward();
+  }
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    _entryCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _handleSignIn() async {
+  Future<void> _googleSignIn() async {
+    HapticFeedback.mediumImpact();
+    setState(() => _loading = true);
+    await ref.read(authProvider.notifier).googleSignIn();
+    if (!mounted) return;
+    setState(() => _loading = false);
+    final s = ref.read(authProvider);
+    if (s.isAuthenticated) {
+      HapticFeedback.heavyImpact();
+      context.go('/home');
+    } else if (s.requiresDeviceManagement) {
+      context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
+    }
+    // error case: s.error is non-null — the error widget in the form will display it
+    // via ref.watch(authProvider.select((s) => s.error))
+  }
+
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     HapticFeedback.mediumImpact();
-    setState(() => _isLoading = true);
-
+    setState(() => _loading = true);
     await ref.read(authProvider.notifier).signIn(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
+      email: _emailCtrl.text.trim(),
+      password: _passCtrl.text,
     );
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-      final authState = ref.read(authProvider);
-      if (authState.isAuthenticated) {
-        HapticFeedback.heavyImpact();
-        context.go('/home');
-      } else if (authState.requiresDeviceManagement) {
-        context.push('/auth/manage-devices?token=${Uri.encodeComponent(authState.deviceManagementToken!)}');
-      }
+    if (!mounted) return;
+    setState(() => _loading = false);
+    final s = ref.read(authProvider);
+    if (s.isAuthenticated) {
+      HapticFeedback.heavyImpact();
+      context.go('/home');
+    } else if (s.requiresDeviceManagement) {
+      context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Only watch the error field - not the whole auth state
     final error = ref.watch(authProvider.select((s) => s.error));
 
-    return Column(
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.go('/discover'),
-            color: Colors.grey[700],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          elevation: 20,
-          shadowColor: AppTheme.brandPrimary.withOpacity(0.1),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(24),
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 8),
+
+            // Logo + header
+            Center(
+              child: Column(children: [
+                Container(
+                  width: 72, height: 72,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 24)],
+                  ),
+                  child: ClipOval(
+                    child: Image.asset('assets/logo.png', fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.menu_book_rounded, color: AppTheme.brandPrimary, size: 36)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text('Welcome back',
+                    style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text('Sign in to continue your reading journey',
+                    style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 15),
+                    textAlign: TextAlign.center),
+              ]),
             ),
-            padding: const EdgeInsets.all(32),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildLogo(context),
-                  const SizedBox(height: 32),
-                  Text('Welcome Back',
-                    style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center),
-                  const SizedBox(height: 8),
-                  Text('Sign in to continue your reading journey',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
-                    textAlign: TextAlign.center),
-                  const SizedBox(height: 24),
 
-                  // Error message
-                  if (error != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.red[200]!),
-                      ),
-                      child: Row(children: [
-                        Icon(Icons.error_outline, color: Colors.red[700], size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(error, style: TextStyle(color: Colors.red[700], fontSize: 14))),
-                      ]),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+            const SizedBox(height: 32),
 
-                  // Google button
-                  OutlinedButton(
-                    onPressed: _isLoading ? null : () {},
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: Colors.grey[300]!),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.g_mobiledata, size: 22, color: Colors.black54),
-                        SizedBox(width: 10),
-                        Text('Continue with Google', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.black87)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Divider
-                  Row(children: [
-                    const Expanded(child: Divider()),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text('OR CONTINUE WITH EMAIL',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[500], fontWeight: FontWeight.w500)),
-                    ),
-                    const Expanded(child: Divider()),
-                  ]),
-                  const SizedBox(height: 20),
-
-                  // Email
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    enabled: !_isLoading,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'Enter your email',
-                      prefixIcon: Icon(Icons.mail_outline, color: Colors.grey[400]),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.brand300, width: 2)),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Please enter your email';
-                      if (!v.contains('@')) return 'Please enter a valid email';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Password
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    enabled: !_isLoading,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      hintText: 'Enter your password',
-                      prefixIcon: Icon(Icons.lock_outline, color: Colors.grey[400]),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey[400]),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.brand300, width: 2)),
-                    ),
-                    validator: (v) => (v == null || v.isEmpty) ? 'Please enter your password' : null,
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Remember me + forgot password
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(children: [
-                        SizedBox(
-                          height: 20, width: 20,
-                          child: Checkbox(
-                            value: _rememberMe,
-                            onChanged: (v) => setState(() => _rememberMe = v ?? false),
-                            activeColor: AppTheme.brandPrimary,
-                          ),
+            // Glass card
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.15)),
+              ),
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (error != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withOpacity(0.3)),
                         ),
-                        const SizedBox(width: 8),
-                        Text('Remember me', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                      ]),
-                      TextButton(
-                        onPressed: () => context.push('/auth/forgot-password'),
-                        child: Text('Forgot password?', style: TextStyle(fontSize: 14, color: AppTheme.brandPrimary)),
+                        child: Row(children: [
+                          const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(error,
+                              style: const TextStyle(color: Colors.redAccent, fontSize: 13))),
+                        ]),
                       ),
+                      const SizedBox(height: 16),
                     ],
-                  ),
-                  const SizedBox(height: 20),
 
-                  // Sign in button
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _handleSignIn,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: AppTheme.brandPrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 4,
-                      shadowColor: AppTheme.brandPrimary.withOpacity(0.3),
+                    // ── Continue with Google ──────────────────────────────
+                    _GoogleButton(onTap: _loading ? null : _googleSignIn, isLoading: _loading),
+                    const SizedBox(height: 16),
+                    _OrDivider(),
+                    const SizedBox(height: 16),
+                    // ─────────────────────────────────────────────────────
+
+                    TextFormField(
+                      controller: _emailCtrl,
+                      enabled: !_loading,
+                      style: kAuthInputStyle,
+                      decoration: authInputDecoration(
+                          label: 'Email', hint: 'you@example.com', icon: Icons.mail_outline_rounded),
+                      validator: (v) => (v == null || !v.contains('@')) ? 'Enter a valid email' : null,
                     ),
-                    child: _isLoading
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)))
-                        : const Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 14),
 
-                  // Sign up link
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text("Don't have an account? ", style: TextStyle(color: Colors.grey[600])),
-                      TextButton(
-                        onPressed: () => context.push('/auth/sign-up'),
-                        style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                        child: const Text('Sign up', style: TextStyle(fontWeight: FontWeight.w600)),
+                    TextFormField(
+                      controller: _passCtrl,
+                      obscureText: _obscure,
+                      enabled: !_loading,
+                      style: kAuthInputStyle,
+                      decoration: authInputDecoration(
+                        label: 'Password', hint: '••••••••', icon: Icons.lock_outline_rounded,
+                        suffix: IconButton(
+                          icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: Colors.white54, size: 20),
+                          onPressed: () => setState(() => _obscure = !_obscure),
+                        ),
                       ),
-                    ],
-                  ),
-                ],
+                      validator: (v) => (v == null || v.isEmpty) ? 'Enter your password' : null,
+                    ),
+
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => context.push('/auth/forgot-password'),
+                        style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero, minimumSize: const Size(0, 32)),
+                        child: Text('Forgot password?',
+                            style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    SizedBox(
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: _loading ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppTheme.brandPrimary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                        child: _loading
+                            ? const SizedBox(width: 20, height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(AppTheme.brandPrimary)))
+                            : const Text('Sign In',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+
+            const SizedBox(height: 24),
+
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text("Don't have an account? ",
+                  style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 14)),
+              GestureDetector(
+                onTap: () => context.go('/auth/sign-up'),
+                child: const Text('Sign up',
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700,
+                        decoration: TextDecoration.underline, decorationColor: Colors.white)),
+              ),
+            ]),
+          ],
         ),
-        const SizedBox(height: 24),
-        Text(
-          'By signing in, you agree to our Terms of Service and Privacy Policy',
-          style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-          textAlign: TextAlign.center,
-        ),
-      ],
+      ),
     );
   }
+}
 
-  Widget _buildLogo(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(
-            'assets/logo.png',
-            width: 48,
-            height: 48,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [AppTheme.brand600, AppTheme.brand800]),
-                borderRadius: BorderRadius.circular(12),
+// ─── Shared Google button & divider ───────────────────────────────────────────
+
+class _GoogleButton extends StatelessWidget {
+  const _GoogleButton({required this.onTap, this.isLoading = false});
+  final VoidCallback? onTap;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+          side: BorderSide(color: Colors.white.withOpacity(0.3)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20, height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(Color(0xFF4285F4)),
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'G',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF4285F4),
+                      fontFamily: 'Arial',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text('Continue with Google',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                ],
               ),
-              child: const Icon(Icons.menu_book, color: Colors.white, size: 28),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        ShaderMask(
-          shaderCallback: (b) => const LinearGradient(colors: [AppTheme.brand600, AppTheme.brand800]).createShader(b),
-          child: Text('Knowvas',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
-        ),
-      ],
+      ),
     );
+  }
+}
+
+class _GoogleLogo extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      'G',
+      style: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF4285F4),
+        fontFamily: 'Arial',
+      ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Expanded(child: Divider(color: Colors.white.withOpacity(0.25), thickness: 1)),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Text('or',
+            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13)),
+      ),
+      Expanded(child: Divider(color: Colors.white.withOpacity(0.25), thickness: 1)),
+    ]);
   }
 }
