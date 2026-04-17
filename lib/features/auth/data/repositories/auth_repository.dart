@@ -15,6 +15,8 @@ import '../../../../shared/models/reading_stats.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/user_preferences.dart';
 
+enum SessionCheckResult { ok, sessionExpired, deviceRemoved }
+
 /// Repository for authentication operations
 /// Handles sign in, sign up, token refresh, and sign out
 class AuthRepository {
@@ -411,6 +413,31 @@ class AuthRepository {
     }
   }
 
+  /// Check session validity by hitting /api/auth/me.
+  /// Equivalent to the web's checkSessionValidity() in auth-context.tsx.
+  /// Returns ok, sessionExpired, or deviceRemoved.
+  Future<SessionCheckResult> checkSession() async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        ApiConstants.profile,
+      );
+
+      if (response.statusCode == 200) return SessionCheckResult.ok;
+
+      if (response.statusCode == 401) {
+        final reason = response.data?['reason'] as String?;
+        if (reason == 'device_removed') return SessionCheckResult.deviceRemoved;
+        return SessionCheckResult.sessionExpired;
+      }
+
+      // Any other non-200 — treat as temporary, don't kill the session
+      return SessionCheckResult.ok;
+    } catch (e) {
+      // Network error — don't kill the session
+      return SessionCheckResult.ok;
+    }
+  }
+
   /// Sign out and clear all stored tokens
   /// Optionally calls backend logout endpoint
   /// Always clears local tokens even if backend call fails
@@ -422,20 +449,26 @@ class AuthRepository {
         final accessToken = await _secureStorage.read(
           key: StorageKeys.accessToken,
         );
+        final deviceId = await DeviceService.instance.getDeviceId();
+        final deviceName = await DeviceService.instance.getDeviceName();
 
         if (accessToken != null) {
+          // Must include Authorization, X-Device-ID, and X-Device-Name so the
+          // backend can identify and delete the correct UserDevice record.
           await _apiClient.post<Map<String, dynamic>>(
             ApiConstants.logout,
             options: Options(
               headers: {
                 'Authorization': 'Bearer $accessToken',
+                'X-Device-ID': deviceId,
+                'X-Device-Name': deviceName,
               },
             ),
           );
+          debugPrint('✅ signOut: device $deviceId removed from backend');
         }
       } catch (e) {
-        // Log but don't throw - local cleanup is more important
-        // In production, you might want to log this to analytics
+        debugPrint('⚠️ signOut: backend call failed (continuing): $e');
       }
 
       // Clear all stored tokens and user data
@@ -518,26 +551,26 @@ class AuthRepository {
   /// Uses stored user ID and creates basic user data
   Future<User> createFallbackUser() async {
     final userId = await getUserId();
-    
-    // Import required models
     const preferences = UserPreferences();
     const stats = ReadingStats();
-    
+
+    // Safe substring — userId may be short (e.g. "12")
+    final suffix = userId != null && userId.length >= 4
+        ? userId.substring(0, 4)
+        : (userId ?? '0000').padRight(4, '0');
+
     final fallbackUser = User(
       id: userId ?? 'unknown',
-      email: 'user@example.com', // Placeholder
-      username: 'user${userId?.substring(0, 4) ?? '0000'}',
+      email: 'user@example.com',
+      username: 'user$suffix',
       firstName: 'User',
-      lastName: 'Name',
+      lastName: '',
       preferences: preferences,
       stats: stats,
     );
-    
+
     debugPrint('✅ Created fallback user: ${fallbackUser.username}');
-    
-    // Store fallback user data
     await _storeUserData(fallbackUser);
-    
     return fallbackUser;
   }
 
@@ -752,6 +785,7 @@ class AuthRepository {
       }
 
       final data = response.data;
+      debugPrint('🔵 googleSignIn: status=${response.statusCode} body=$data');
       String errorMessage = 'Google sign in failed';
 
       if (data is Map<String, dynamic>) {
@@ -759,10 +793,12 @@ class AuthRepository {
 
         if (response.statusCode == 403 && data['manage_devices'] == true) {
           final token = data['device_management_token'] as String? ?? '';
+          debugPrint('🔵 googleSignIn: device limit reached, token=$token');
           throw DeviceLimitFailure(token);
         }
       }
 
+      debugPrint('❌ googleSignIn: throwing AuthFailure: $errorMessage');
       throw AuthFailure(errorMessage, code: 'GOOGLE_SIGN_IN_FAILED');
     } on Failure {
       rethrow;

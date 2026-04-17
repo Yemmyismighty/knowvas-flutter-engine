@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
 import '../constants/storage_keys.dart';
@@ -12,13 +13,16 @@ class AuthInterceptor extends Interceptor {
     required SecureStorage secureStorage,
     Logger? logger,
     Future<String?> Function()? onTokenRefresh,
+    VoidCallback? onSessionExpired,
   })  : _secureStorage = secureStorage,
         _logger = logger ?? Logger(),
-        _onTokenRefresh = onTokenRefresh;
+        _onTokenRefresh = onTokenRefresh,
+        _onSessionExpired = onSessionExpired;
 
   final SecureStorage _secureStorage;
   final Logger _logger;
   final Future<String?> Function()? _onTokenRefresh;
+  final VoidCallback? _onSessionExpired;
 
   @override
   Future<void> onRequest(
@@ -26,9 +30,17 @@ class AuthInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     try {
-      // Always attach the stable device ID so the backend can track this device
+      // Always attach the stable device ID so the backend can track this device.
+      // We set a temporary value first so it's present even if getDeviceId() throws.
+      options.headers['X-Device-ID'] = 'mobile-unknown';
       final deviceId = await DeviceService.instance.getDeviceId();
       options.headers['X-Device-ID'] = deviceId;
+      _logger.d('X-Device-ID: $deviceId → ${options.path}');
+
+      // Also send the human-readable device name so the backend doesn't have
+      // to parse the Dart User-Agent string (which returns "Other").
+      final deviceName = await DeviceService.instance.getDeviceName();
+      options.headers['X-Device-Name'] = deviceName;
 
       // Skip token injection for public auth endpoints
       if (_isAuthEndpoint(options.path)) {
@@ -50,6 +62,10 @@ class AuthInterceptor extends Interceptor {
       handler.next(options);
     } catch (e) {
       _logger.e('Error in AuthInterceptor.onRequest: $e');
+      // Ensure X-Device-ID is always present even on error
+      if (options.headers['X-Device-ID'] == null) {
+        options.headers['X-Device-ID'] = 'mobile-unknown';
+      }
       handler.next(options);
     }
   }
@@ -59,32 +75,42 @@ class AuthInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    // Handle 401 Unauthorized - attempt token refresh
+    // Handle 401 — attempt silent token refresh then retry, exactly like the web's apiFetch
     if (err.response?.statusCode == 401 && _onTokenRefresh != null) {
-      _logger.w('Received 401, attempting token refresh');
+      // Don't retry refresh or /api/auth/me itself to avoid infinite loops
+      final path = err.requestOptions.path;
+      if (path.contains('/api/auth/refresh') || path.contains('/api/auth/me')) {
+        // Refresh token is invalid/expired — session is over
+        _logger.e('Session expired — refresh or /me returned 401');
+        if (_onSessionExpired != null) _onSessionExpired!();
+        return handler.next(err);
+      }
+
+      _logger.w('Received 401, attempting token refresh for: $path');
 
       try {
-        // Attempt to refresh the token
         final newAccessToken = await _onTokenRefresh!();
 
         if (newAccessToken != null && newAccessToken.isNotEmpty) {
-          _logger.i('Token refresh successful, retrying request');
+          _logger.i('Token refresh successful, retrying: $path');
 
-          // Update the failed request with new token
-          err.requestOptions.headers['Authorization'] =
-              'Bearer $newAccessToken';
+          // Reuse the original request options — keeps X-Device-ID and all other headers.
+          // Just swap in the new access token.
+          final retryOptions = err.requestOptions;
+          retryOptions.headers['Authorization'] = 'Bearer $newAccessToken';
 
-          // Retry the request with new token
+          // Fetch using the same Dio instance so interceptors run again
           final dio = Dio();
-          final response = await dio.fetch<dynamic>(err.requestOptions);
-
+          final response = await dio.fetch<dynamic>(retryOptions);
           return handler.resolve(response);
         } else {
-          _logger.e('Token refresh failed - no new token received');
+          _logger.e('Token refresh returned null — session expired');
+          if (_onSessionExpired != null) _onSessionExpired!();
           return handler.next(err);
         }
       } catch (e) {
-        _logger.e('Token refresh error: $e');
+        _logger.e('Token refresh threw: $e — session expired');
+        if (_onSessionExpired != null) _onSessionExpired!();
         return handler.next(err);
       }
     }
@@ -94,14 +120,19 @@ class AuthInterceptor extends Interceptor {
 
   /// Check if the endpoint is an auth endpoint that doesn't need token
   bool _isAuthEndpoint(String path) {
+    // Only skip token injection for endpoints that don't require authentication.
+    // /api/auth/me is intentionally excluded — it requires a Bearer token.
     final authPaths = [
       '/api/auth/login',
       '/api/auth/signup',
       '/api/auth/refresh',
       '/api/auth/forgot-password',
       '/api/auth/reset-password',
+      '/api/auth/google-login',
+      '/api/auth/verify-email',
+      '/api/auth/resend-verification-email',
     ];
 
-    return authPaths.any(path.contains);
+    return authPaths.any((p) => path.contains(p));
   }
 }

@@ -104,6 +104,50 @@ class Auth extends _$Auth {
     }
   }
 
+  /// Called by the AuthInterceptor when a token refresh fails (401 on /me or /refresh).
+  /// Equivalent to the web's auth:session-expired event handler.
+  void handleSessionExpired() {
+    debugPrint('🔴 Session expired — clearing auth state');
+    state = AuthState.sessionExpired();
+  }
+
+  /// Called by the AuthInterceptor when /api/auth/me returns device_removed.
+  void handleDeviceRemoved() {
+    debugPrint('🔴 Device removed — clearing auth state');
+    state = AuthState.deviceRemoved();
+  }
+
+  /// Equivalent to the web's checkSessionValidity().
+  /// Hits /api/auth/me and reacts to the response.
+  /// Called on app resume and periodically while authenticated.
+  Future<void> checkSessionValidity() async {
+    if (!state.isAuthenticated) return;
+
+    try {
+      final repository = ref.read<AuthRepository>(authRepositoryProvider);
+      final response = await repository.checkSession();
+
+      if (response == SessionCheckResult.ok) return;
+
+      if (response == SessionCheckResult.deviceRemoved) {
+        debugPrint('🔴 Session check: device removed');
+        state = AuthState.deviceRemoved();
+      } else if (response == SessionCheckResult.sessionExpired) {
+        debugPrint('🔴 Session check: session expired');
+        state = AuthState.sessionExpired();
+      }
+    } catch (e) {
+      // Network error — don't sign out, same as web behaviour
+      debugPrint('⚠️ Session check failed (network?): $e');
+    }
+  }
+
+  /// Clear the session-terminated flag after the user has acknowledged it
+  /// and been redirected to the sign-in screen.
+  void clearSessionTermination() {
+    state = AuthState.unauthenticated();
+  }
+
   /// Sign in with Google
   /// Gets Google ID token natively, sends to backend, authenticates user
   Future<void> googleSignIn() async {

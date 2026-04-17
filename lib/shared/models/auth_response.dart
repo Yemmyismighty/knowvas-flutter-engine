@@ -89,8 +89,8 @@ class SignUpData extends Equatable {
     return {
       'email': email,
       'password': password,
-      'first_name': firstName,
-      'last_name': lastName,
+      'firstname': firstName,
+      'lastname': lastName,
       'username': username,
     };
   }

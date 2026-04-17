@@ -33,23 +33,26 @@ class User extends Equatable {
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    // The backend wraps the user inside a "user" key on /api/auth/me
+    final data = json['user'] is Map ? Map<String, dynamic>.from(json['user'] as Map) : json;
     return User(
-      id: json['id']?.toString() ?? '',
-      email: json['email'] as String? ?? '',
-      username: json['username'] as String? ?? '',
-      firstName: json['first_name'] as String? ?? '',
-      lastName: json['last_name'] as String? ?? '',
-      profilePicture: json['profile_picture'] as String?,
-      bio: json['bio'] as String?,
-      preferredCurrency: json['preferred_currency'] as String?,
-      preferences: json['preferences'] != null
-          ? UserPreferences.fromJson(Map<String, dynamic>.from(json['preferences'] as Map))
+      id: data['id']?.toString() ?? '',
+      email: data['email'] as String? ?? '',
+      username: data['username'] as String? ?? '',
+      // Backend uses 'firstname'/'lastname' (no underscore)
+      firstName: data['firstname'] as String? ?? data['first_name'] as String? ?? '',
+      lastName: data['lastname'] as String? ?? data['last_name'] as String? ?? '',
+      profilePicture: data['profile_picture'] as String?,
+      bio: data['bio'] is String ? data['bio'] as String : null,
+      preferredCurrency: data['preferred_currency'] as String?,
+      preferences: data['preferences'] is Map
+          ? UserPreferences.fromJson(Map<String, dynamic>.from(data['preferences'] as Map))
           : const UserPreferences(),
-      stats: json['stats'] != null
-          ? ReadingStats.fromJson(Map<String, dynamic>.from(json['stats'] as Map))
+      stats: data['stats'] is Map
+          ? ReadingStats.fromJson(Map<String, dynamic>.from(data['stats'] as Map))
           : const ReadingStats(),
-      followerCount: json['follower_count'] as int? ?? 0,
-      followingCount: json['following_count'] as int? ?? 0,
+      followerCount: data['follower_count'] as int? ?? 0,
+      followingCount: data['following_count'] as int? ?? 0,
     );
   }
 

@@ -8,12 +8,11 @@ import 'package:uuid/uuid.dart';
 const _kDeviceIdKey = 'knowvas_device_id';
 const _kDeviceNameKey = 'knowvas_device_name';
 
-/// Provides a stable, hardware-backed device ID and a human-readable device name.
+/// Provides a stable unique device ID and a human-readable device name.
 ///
-/// On Android we use [AndroidDeviceInfo.id] (a hardware-derived identifier).
-/// On iOS we use [IosDeviceInfo.identifierForVendor].
-/// As a fallback we generate a UUID and persist it in secure storage so it
-/// survives app restarts but is unique per install.
+/// The device ID is a UUID persisted in secure storage — unique per app install,
+/// stable across restarts, and not affected by OS build fingerprints being shared
+/// across devices. It is prefixed with the platform for readability.
 class DeviceService {
   DeviceService._();
 
@@ -25,29 +24,59 @@ class DeviceService {
   String? _cachedId;
   String? _cachedName;
 
-  /// Returns a stable unique device ID, generating and persisting one if needed.
+  /// Returns a stable unique device ID.
+  /// Generated once per install and persisted in secure storage.
   Future<String> getDeviceId() async {
     if (_cachedId != null) return _cachedId!;
 
+    // Check if we already have a persisted ID for this install
     try {
-      if (Platform.isAndroid) {
-        final info = await _plugin.androidInfo;
-        // androidInfo.id is a hardware-derived 64-bit identifier
-        _cachedId = 'android-${info.id}';
-      } else if (Platform.isIOS) {
-        final info = await _plugin.iosInfo;
-        // identifierForVendor is stable per app vendor per device
-        _cachedId = 'ios-${info.identifierForVendor ?? await _getFallbackId()}';
-      } else {
-        _cachedId = await _getFallbackId();
+      final stored = await _storage.read(key: _kDeviceIdKey);
+      if (stored != null && stored.isNotEmpty) {
+        // Migrate away from the old build-fingerprint format (android-UP1A.xxx)
+        // which is NOT unique per device — it's the same on every phone running
+        // that Android build. Detect it by checking if it looks like a build ID
+        // rather than a UUID (UUIDs contain hyphens in the pattern xxxxxxxx-xxxx-...).
+        final isOldFormat = _isOldBuildFingerprintFormat(stored);
+        if (!isOldFormat) {
+          _cachedId = stored;
+          return _cachedId!;
+        }
+        // Old format — fall through to generate a new UUID-based ID
+        debugPrint('⚠️ DeviceService: migrating old device ID format: $stored');
       }
+    } catch (_) {}
+
+    // Generate a new UUID-based ID, prefixed with platform
+    try {
+      final prefix = Platform.isAndroid
+          ? 'android'
+          : Platform.isIOS
+              ? 'ios'
+              : 'mobile';
+      _cachedId = '$prefix-${const Uuid().v4()}';
     } catch (e) {
-      debugPrint('⚠️ DeviceService: could not read hardware ID, using fallback: $e');
-      _cachedId = await _getFallbackId();
+      _cachedId = 'mobile-${const Uuid().v4()}';
     }
 
-    await _storage.write(key: _kDeviceIdKey, value: _cachedId);
+    try {
+      await _storage.write(key: _kDeviceIdKey, value: _cachedId);
+    } catch (_) {}
+
+    debugPrint('✅ DeviceService: device ID: $_cachedId');
     return _cachedId!;
+  }
+
+  /// Detects the old build-fingerprint format like "android-UP1A.231005.007"
+  /// vs the new UUID format like "android-550e8400-e29b-41d4-a716-446655440000".
+  /// UUIDs always have exactly 4 hyphens in the UUID portion; build IDs have dots.
+  bool _isOldBuildFingerprintFormat(String id) {
+    // New format: "android-{uuid}" where uuid has pattern 8-4-4-4-12 hex chars
+    final uuidPattern = RegExp(
+      r'^(android|ios|mobile)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    );
+    return !uuidPattern.hasMatch(id);
   }
 
   /// Returns a human-readable device name, e.g. "Samsung Galaxy S23" or "iPhone 15 Pro".
@@ -60,7 +89,7 @@ class DeviceService {
         _cachedName = '${info.manufacturer} ${info.model}';
       } else if (Platform.isIOS) {
         final info = await _plugin.iosInfo;
-        _cachedName = info.name; // e.g. "John's iPhone"
+        _cachedName = info.name;
       } else {
         _cachedName = 'Unknown Device';
       }
@@ -68,16 +97,10 @@ class DeviceService {
       _cachedName = 'Mobile Device';
     }
 
-    await _storage.write(key: _kDeviceNameKey, value: _cachedName);
-    return _cachedName!;
-  }
+    try {
+      await _storage.write(key: _kDeviceNameKey, value: _cachedName);
+    } catch (_) {}
 
-  /// UUID-based fallback — persisted in secure storage so it's stable across launches.
-  Future<String> _getFallbackId() async {
-    final stored = await _storage.read(key: _kDeviceIdKey);
-    if (stored != null) return stored;
-    final id = 'mobile-${const Uuid().v4()}';
-    await _storage.write(key: _kDeviceIdKey, value: id);
-    return id;
+    return _cachedName!;
   }
 }

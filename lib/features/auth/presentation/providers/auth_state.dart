@@ -2,6 +2,8 @@ import 'package:equatable/equatable.dart';
 
 import '../../../../shared/models/user.dart';
 
+enum SessionTerminationReason { deviceRemoved, sessionExpired }
+
 /// Authentication state
 class AuthState extends Equatable {
   const AuthState({
@@ -11,6 +13,8 @@ class AuthState extends Equatable {
     this.error,
     this.isInitialized = false,
     this.deviceManagementToken,
+    this.sessionTerminated = false,
+    this.sessionTerminationReason,
   });
 
   factory AuthState.initial() {
@@ -25,11 +29,23 @@ class AuthState extends Equatable {
     return const AuthState(isInitialized: true);
   }
 
-  /// Device limit reached - user must manage devices before signing in
   factory AuthState.deviceLimitReached(String token) {
-    return AuthState(
+    return AuthState(isInitialized: true, deviceManagementToken: token);
+  }
+
+  factory AuthState.sessionExpired() {
+    return const AuthState(
       isInitialized: true,
-      deviceManagementToken: token,
+      sessionTerminated: true,
+      sessionTerminationReason: SessionTerminationReason.sessionExpired,
+    );
+  }
+
+  factory AuthState.deviceRemoved() {
+    return const AuthState(
+      isInitialized: true,
+      sessionTerminated: true,
+      sessionTerminationReason: SessionTerminationReason.deviceRemoved,
     );
   }
 
@@ -38,10 +54,11 @@ class AuthState extends Equatable {
   final bool isLoading;
   final String? error;
   final bool isInitialized;
-
-  /// Non-null when the backend returns a device limit error.
-  /// The sign-in screen should navigate to manage-devices with this token.
   final String? deviceManagementToken;
+
+  /// True when the session was terminated externally (expired or device removed)
+  final bool sessionTerminated;
+  final SessionTerminationReason? sessionTerminationReason;
 
   bool get requiresDeviceManagement => deviceManagementToken != null;
 
@@ -70,6 +87,8 @@ class AuthState extends Equatable {
     String? error,
     bool? isInitialized,
     String? deviceManagementToken,
+    bool? sessionTerminated,
+    SessionTerminationReason? sessionTerminationReason,
   }) {
     return AuthState(
       user: user ?? this.user,
@@ -78,11 +97,14 @@ class AuthState extends Equatable {
       error: error,
       isInitialized: isInitialized ?? this.isInitialized,
       deviceManagementToken: deviceManagementToken ?? this.deviceManagementToken,
+      sessionTerminated: sessionTerminated ?? this.sessionTerminated,
+      sessionTerminationReason: sessionTerminationReason ?? this.sessionTerminationReason,
     );
   }
 
   @override
   List<Object?> get props => [
-        user, isAuthenticated, isLoading, error, isInitialized, deviceManagementToken,
+        user, isAuthenticated, isLoading, error, isInitialized,
+        deviceManagementToken, sessionTerminated, sessionTerminationReason,
       ];
 }

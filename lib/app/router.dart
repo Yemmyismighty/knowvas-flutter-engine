@@ -33,6 +33,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authProvider.select((state) => (
     isInitialized: state.isInitialized,
     isAuthenticated: state.isAuthenticated,
+    sessionTerminated: state.sessionTerminated,
   )));
   final onboardingAsync = ref.watch(onboardingDoneProvider);
 
@@ -42,12 +43,17 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isInitialized = authState.isInitialized;
       final isAuthenticated = authState.isAuthenticated;
+      final sessionTerminated = authState.sessionTerminated;
       final isGoingToAuth = state.matchedLocation.startsWith('/auth');
       final isOnRoot = state.matchedLocation == '/';
       final isOnboarding = state.matchedLocation == '/onboarding';
 
-      // Wait for auth initialization
       if (!isInitialized) return null;
+
+      // Session was terminated externally — redirect to sign-in
+      if (sessionTerminated && !isGoingToAuth) {
+        return '/auth/sign-in';
+      }
 
       // Show onboarding on very first launch (only from root)
       if (isOnRoot && !isAuthenticated) {

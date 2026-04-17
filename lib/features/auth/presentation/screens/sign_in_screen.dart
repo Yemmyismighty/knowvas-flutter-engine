@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/auth_state.dart';
 import '_auth_shared.dart';
 
 // ─── Screen shell ─────────────────────────────────────────────────────────────
@@ -103,14 +104,15 @@ class _SignInFormState extends ConsumerState<_SignInForm>
     if (!mounted) return;
     setState(() => _loading = false);
     final s = ref.read(authProvider);
+    debugPrint('🔵 _googleSignIn result: isAuthenticated=${s.isAuthenticated}, '
+        'requiresDeviceManagement=${s.requiresDeviceManagement}, '
+        'token=${s.deviceManagementToken}, error=${s.error}');
     if (s.isAuthenticated) {
       HapticFeedback.heavyImpact();
       context.go('/home');
     } else if (s.requiresDeviceManagement) {
       context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
     }
-    // error case: s.error is non-null — the error widget in the form will display it
-    // via ref.watch(authProvider.select((s) => s.error))
   }
 
   Future<void> _submit() async {
@@ -135,6 +137,15 @@ class _SignInFormState extends ConsumerState<_SignInForm>
   @override
   Widget build(BuildContext context) {
     final error = ref.watch(authProvider.select((s) => s.error));
+    final sessionTerminated = ref.watch(authProvider.select((s) => s.sessionTerminated));
+    final terminationReason = ref.watch(authProvider.select((s) => s.sessionTerminationReason));
+
+    // Clear the termination flag once the user lands on this screen
+    ref.listen(authProvider.select((s) => s.sessionTerminated), (_, terminated) {
+      if (terminated) {
+        Future.microtask(() => ref.read(authProvider.notifier).clearSessionTermination());
+      }
+    });
 
     return FadeTransition(
       opacity: _fade,
@@ -186,6 +197,28 @@ class _SignInFormState extends ConsumerState<_SignInForm>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (sessionTerminated) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                        ),
+                        child: Row(children: [
+                          const Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(
+                            terminationReason == SessionTerminationReason.deviceRemoved
+                                ? 'You were signed out because this device was removed.'
+                                : 'Your session has expired. Please sign in again.',
+                            style: const TextStyle(color: Colors.orange, fontSize: 13),
+                          )),
+                        ]),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
                     if (error != null) ...[
                       Container(
                         padding: const EdgeInsets.all(12),

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 
 import '../../features/auth/data/repositories/auth_repository_provider.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../constants/api_constants.dart';
 import '../security/secure_storage.dart';
 import 'api_client.dart';
@@ -29,7 +30,7 @@ final networkInfoProvider = Provider<NetworkInfo>((ref) {
   return NetworkInfo();
 });
 
-/// Provider for AuthInterceptor with token refresh callback
+/// Provider for AuthInterceptor with token refresh + session-expired callbacks
 final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
   final secureStorage = ref.watch(secureStorageProvider);
   final logger = ref.watch(loggerProvider);
@@ -38,7 +39,6 @@ final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
     secureStorage: secureStorage,
     logger: logger,
     onTokenRefresh: () async {
-      // Use the auth repository to handle token refresh
       final authRepository = ref.read(authRepositoryProvider);
       try {
         final tokenResponse = await authRepository.refreshToken();
@@ -47,6 +47,11 @@ final authInterceptorProvider = Provider<AuthInterceptor>((ref) {
         logger.e('Token refresh failed in interceptor: $e');
         return null;
       }
+    },
+    // Mirror the web's auth:session-expired event — tell the auth provider
+    // the session is dead so it can update state and show the right message.
+    onSessionExpired: () {
+      ref.read(authProvider.notifier).handleSessionExpired();
     },
   );
 });
