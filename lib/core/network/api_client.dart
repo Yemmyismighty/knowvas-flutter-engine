@@ -40,14 +40,7 @@ class ApiClient {
       _dio.interceptors.add(retryInterceptor);
     }
 
-    // Add logging interceptor for debugging
-    _dio.interceptors.add(
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        logPrint: _logger.d,
-      ),
-    );
+    // Interceptors added above handle auth and retry.
   }
 
   final Dio _dio;

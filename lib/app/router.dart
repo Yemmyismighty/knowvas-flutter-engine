@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/presentation/providers/auth_provider.dart';
+import '../features/auth/presentation/providers/auth_state.dart';
 import '../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../features/auth/presentation/screens/manage_devices_screen.dart';
 import '../features/auth/presentation/screens/landing_screen.dart';
@@ -24,59 +25,22 @@ import '../features/reader/presentation/screens/webview_reader_screen.dart';
 import '../features/settings/presentation/screens/screens.dart';
 import '../features/social/presentation/screens/screens.dart';
 import '../features/subscription/presentation/screens/pricing_screen.dart';
+import '../shared/widgets/app_loading_screen.dart';
 
 /// Tracks whether onboarding has been completed (loaded once at startup)
 final onboardingDoneProvider = FutureProvider<bool>((ref) => hasSeenOnboarding());
 
 /// Router configuration provider
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider.select((state) => (
-    isInitialized: state.isInitialized,
-    isAuthenticated: state.isAuthenticated,
-    sessionTerminated: state.sessionTerminated,
-  )));
-  final onboardingAsync = ref.watch(onboardingDoneProvider);
+  // Use a RouterNotifier so the router instance is created ONCE and only
+  // the redirect logic re-evaluates when auth state changes.
+  final notifier = _RouterNotifier(ref);
 
   return GoRouter(
     initialLocation: '/',
-    debugLogDiagnostics: true,
-    redirect: (context, state) {
-      final isInitialized = authState.isInitialized;
-      final isAuthenticated = authState.isAuthenticated;
-      final sessionTerminated = authState.sessionTerminated;
-      final isGoingToAuth = state.matchedLocation.startsWith('/auth');
-      final isOnRoot = state.matchedLocation == '/';
-      final isOnboarding = state.matchedLocation == '/onboarding';
-
-      if (!isInitialized) return null;
-
-      // Session was terminated externally — redirect to sign-in
-      if (sessionTerminated && !isGoingToAuth) {
-        return '/auth/sign-in';
-      }
-
-      // Show onboarding on very first launch (only from root)
-      if (isOnRoot && !isAuthenticated) {
-        final onboardingDone = onboardingAsync.valueOrNull ?? true;
-        if (!onboardingDone) return '/onboarding';
-        return '/landing';
-      }
-
-      // Skip onboarding if already authenticated
-      if (isAuthenticated && isOnboarding) return '/home';
-
-      // Redirect authenticated users from auth pages to home
-      if (isAuthenticated && (isGoingToAuth || isOnRoot)) {
-        return '/home';
-      }
-
-      // Redirect unauthenticated users from protected pages to landing
-      if (!isAuthenticated && !isGoingToAuth && !isOnRoot && !isOnboarding) {
-        return '/landing';
-      }
-
-      return null;
-    },
+    debugLogDiagnostics: false,
+    refreshListenable: notifier,
+    redirect: (context, state) => notifier.redirect(context, state),
     routes: [
       // Root - minimal splash while router resolves redirect
       GoRoute(
@@ -421,23 +385,65 @@ class ErrorScreen extends StatelessWidget {
   }
 }
 
-/// Minimal splash shown at `/` while the router resolves the redirect.
-/// Displays just the logo on a white background - no text, no flash.
+/// Listens to auth state changes and notifies the GoRouter to re-evaluate
+/// its redirect. The GoRouter instance is created once — only the redirect
+/// logic re-runs, preventing navigation history resets.
+class _RouterNotifier extends ChangeNotifier {
+  _RouterNotifier(this._ref) {
+    _ref.listen<AuthState>(authProvider, (_, __) => notifyListeners());
+    _ref.listen(onboardingDoneProvider, (_, __) => notifyListeners());
+  }
+
+  final Ref _ref;
+
+  String? redirect(BuildContext context, GoRouterState state) {
+    final authState = _ref.read(authProvider);
+    final onboardingAsync = _ref.read(onboardingDoneProvider);
+
+    final isInitialized = authState.isInitialized;
+    final isAuthenticated = authState.isAuthenticated;
+    final sessionTerminated = authState.sessionTerminated;
+    final loc = state.matchedLocation;
+    final isGoingToAuth = loc.startsWith('/auth');
+    final isOnRoot = loc == '/';
+    final isOnboarding = loc == '/onboarding';
+
+    // While auth is initializing, stay on splash (root)
+    if (!isInitialized) {
+      return isOnRoot ? null : '/';
+    }
+
+    // Session terminated externally — go to sign-in
+    if (sessionTerminated && !isGoingToAuth) {
+      return '/auth/sign-in';
+    }
+
+    // Root: decide where to send the user
+    if (isOnRoot) {
+      if (isAuthenticated) return '/home';
+      final onboardingDone = onboardingAsync.valueOrNull ?? true;
+      return onboardingDone ? '/landing' : '/onboarding';
+    }
+
+    // Onboarding: skip if already authenticated
+    if (isAuthenticated && isOnboarding) return '/home';
+
+    // Authenticated users don't need auth screens
+    if (isAuthenticated && isGoingToAuth) return '/home';
+
+    // Unauthenticated users can't access protected screens
+    if (!isAuthenticated && !isGoingToAuth && !isOnRoot && !isOnboarding) {
+      return '/landing';
+    }
+
+    return null;
+  }
+}
+
+/// Shown at `/` while auth initialises — replaced by AppLoadingScreen.
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Image.asset(
-          'assets/logo.png',
-          width: 80,
-          height: 80,
-          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const AppLoadingScreen();
 }

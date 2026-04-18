@@ -104,14 +104,14 @@ class _SignInFormState extends ConsumerState<_SignInForm>
     if (!mounted) return;
     setState(() => _loading = false);
     final s = ref.read(authProvider);
-    debugPrint('🔵 _googleSignIn result: isAuthenticated=${s.isAuthenticated}, '
-        'requiresDeviceManagement=${s.requiresDeviceManagement}, '
-        'token=${s.deviceManagementToken}, error=${s.error}');
-    if (s.isAuthenticated) {
-      HapticFeedback.heavyImpact();
-      context.go('/home');
-    } else if (s.requiresDeviceManagement) {
+    // Router handles navigation to /home when isAuthenticated becomes true.
+    // We only need to handle the device management case manually.
+    if (s.requiresDeviceManagement) {
       context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
+    } else if (s.isAuthenticated) {
+      HapticFeedback.heavyImpact();
+      // Router will redirect — but push explicitly to avoid delay
+      context.go('/home');
     }
   }
 
@@ -126,11 +126,11 @@ class _SignInFormState extends ConsumerState<_SignInForm>
     if (!mounted) return;
     setState(() => _loading = false);
     final s = ref.read(authProvider);
-    if (s.isAuthenticated) {
+    if (s.requiresDeviceManagement) {
+      context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
+    } else if (s.isAuthenticated) {
       HapticFeedback.heavyImpact();
       context.go('/home');
-    } else if (s.requiresDeviceManagement) {
-      context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
     }
   }
 

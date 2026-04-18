@@ -422,6 +422,8 @@ class AuthRepository {
         ApiConstants.profile,
       );
 
+      debugPrint('🔍 checkSession: status=${response.statusCode} reason=${response.data?['reason']}');
+
       if (response.statusCode == 200) return SessionCheckResult.ok;
 
       if (response.statusCode == 401) {
@@ -430,10 +432,9 @@ class AuthRepository {
         return SessionCheckResult.sessionExpired;
       }
 
-      // Any other non-200 — treat as temporary, don't kill the session
       return SessionCheckResult.ok;
     } catch (e) {
-      // Network error — don't kill the session
+      debugPrint('⚠️ checkSession error (network?): $e');
       return SessionCheckResult.ok;
     }
   }

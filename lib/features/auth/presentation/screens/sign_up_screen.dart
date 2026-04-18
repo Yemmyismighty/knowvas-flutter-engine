@@ -104,14 +104,11 @@ class _SignUpFormState extends ConsumerState<_SignUpForm>
     if (!mounted) return;
     setState(() => _loading = false);
     final s = ref.read(authProvider);
-    debugPrint('🔵 _googleSignIn (signup screen) result: isAuthenticated=${s.isAuthenticated}, '
-        'requiresDeviceManagement=${s.requiresDeviceManagement}, '
-        'token=${s.deviceManagementToken}, error=${s.error}');
-    if (s.isAuthenticated) {
+    if (s.requiresDeviceManagement) {
+      context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
+    } else if (s.isAuthenticated) {
       HapticFeedback.heavyImpact();
       context.go('/home');
-    } else if (s.requiresDeviceManagement) {
-      context.push('/auth/manage-devices?token=${Uri.encodeComponent(s.deviceManagementToken!)}');
     }
   }
 

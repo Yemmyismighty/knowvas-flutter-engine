@@ -12,6 +12,45 @@ import '../features/auth/presentation/providers/auth_provider.dart';
 import '../features/settings/presentation/providers/settings_provider.dart';
 import 'router.dart';
 
+/// Drives the session-validity poll loop.
+/// Starts automatically when the user is authenticated, stops when not.
+/// Lives outside the widget tree so widget rebuilds can't kill it.
+final sessionPollerProvider = Provider<void>((ref) {
+  const base = Duration(seconds: 15);
+  const max = Duration(minutes: 2);
+  int failures = 0;
+  Timer? timer;
+
+  void schedule(Duration delay) {
+    timer?.cancel();
+    timer = Timer(delay, () async {
+      final isAuthenticated = ref.read(authProvider).isAuthenticated;
+      debugPrint('⏱ Session poll — isAuthenticated=$isAuthenticated');
+      if (!isAuthenticated) {
+        failures = 0;
+        schedule(base); // keep polling so we catch re-login
+        return;
+      }
+      try {
+        await ref.read(authProvider.notifier).checkSessionValidity();
+        failures = 0;
+        schedule(base);
+      } catch (_) {
+        failures++;
+        final backoff = Duration(
+          milliseconds: (base.inMilliseconds * (1 << failures.clamp(0, 6)))
+              .clamp(0, max.inMilliseconds),
+        );
+        debugPrint('⚠️ Session poll error — backoff ${backoff.inSeconds}s');
+        schedule(backoff);
+      }
+    });
+  }
+
+  schedule(base);
+  ref.onDispose(() => timer?.cancel());
+});
+
 class KnowvasApp extends ConsumerStatefulWidget {
   const KnowvasApp({super.key});
 
@@ -20,12 +59,6 @@ class KnowvasApp extends ConsumerStatefulWidget {
 }
 
 class _KnowvasAppState extends ConsumerState<KnowvasApp> with WidgetsBindingObserver {
-  Timer? _sessionPollTimer;
-  int _failureCount = 0;
-
-  static const _basePollInterval = Duration(seconds: 30);
-  static const _maxPollInterval = Duration(minutes: 2);
-
   @override
   void initState() {
     super.initState();
@@ -38,66 +71,29 @@ class _KnowvasAppState extends ConsumerState<KnowvasApp> with WidgetsBindingObse
       }
       final router = ref.read(routerProvider);
       PushNotificationService().setRouter(router);
-
-      // Start session polling once the app is fully initialised
-      _startPolling();
     });
   }
 
   @override
   void dispose() {
-    _sessionPollTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  void _startPolling() {
-    _sessionPollTimer?.cancel();
-    _sessionPollTimer = Timer(_basePollInterval, _pollSession);
-  }
-
-  Future<void> _pollSession() async {
-    final isAuthenticated = ref.read(authProvider).isAuthenticated;
-    if (!isAuthenticated) {
-      // Not logged in — no need to poll
-      _failureCount = 0;
-      return;
-    }
-
-    try {
-      await ref.read(authProvider.notifier).checkSessionValidity();
-      _failureCount = 0;
-      // Schedule next poll at base interval
-      _sessionPollTimer = Timer(_basePollInterval, _pollSession);
-    } catch (_) {
-      // Network error — back off exponentially, cap at max
-      _failureCount++;
-      final backoff = Duration(
-        milliseconds: (_basePollInterval.inMilliseconds *
-                (1 << _failureCount.clamp(0, 6)))
-            .clamp(0, _maxPollInterval.inMilliseconds),
-      );
-      _sessionPollTimer = Timer(backoff, _pollSession);
-    }
-  }
-
-  /// Called when the app comes back to the foreground — check immediately
-  /// then reset the poll timer, mirroring the web's visibilitychange handler.
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
     if (lifecycleState == AppLifecycleState.resumed) {
+      // Immediate check on foreground + reset the poll timer
       ref.read(authProvider.notifier).checkSessionValidity();
-      _startPolling(); // reset timer so we don't double-fire
-    } else if (lifecycleState == AppLifecycleState.paused) {
-      // App going to background — pause polling to save battery
-      _sessionPollTimer?.cancel();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watch the session poller to keep it alive for the app's lifetime
+    ref.watch(sessionPollerProvider);
+
     final router = ref.watch(routerProvider);
-    final themeMode = ref.watch(themeModeProvider);
     final themeName = ref.watch(settingsProvider.select((prefs) => prefs.theme));
     final language = ref.watch(settingsProvider.select((prefs) => prefs.language));
 

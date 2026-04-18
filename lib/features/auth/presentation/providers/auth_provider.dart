@@ -26,80 +26,83 @@ class Auth extends _$Auth {
   }
 
   /// Initialize authentication state by checking for stored tokens
+  /// then ALWAYS verifying with the server before showing any authenticated screen.
   Future<void> _initializeAuth() async {
     try {
       final repository = ref.read<AuthRepository>(authRepositoryProvider);
-      
-      // Check if we have tokens
+
       final accessToken = await repository.getAccessToken();
       final refreshToken = await repository.getRefreshToken();
-      
+
       debugPrint('🔐 Auth init: accessToken=${accessToken != null}, refreshToken=${refreshToken != null}');
 
       if (accessToken == null || refreshToken == null) {
-        debugPrint('ℹ️ No tokens found - user is not authenticated');
+        debugPrint('ℹ️ No tokens — unauthenticated');
         state = AuthState.unauthenticated();
         return;
       }
 
-      // Check if session is still valid (within 30 days)
-      final isSessionValid = await repository.isSessionValid();
-      if (!isSessionValid) {
-        debugPrint('❌ Session expired (>30 days) - clearing tokens');
-        await repository.signOut();
-        state = AuthState.unauthenticated();
-        return;
-      }
-
-      // Check if refresh token is expired
+      // Local expiry checks
       final isRefreshTokenExpired = await repository.isRefreshTokenExpired();
       if (isRefreshTokenExpired) {
-        debugPrint('❌ Refresh token expired - clearing session');
+        debugPrint('❌ Refresh token expired locally');
         await repository.signOut();
         state = AuthState.unauthenticated();
         return;
       }
 
-      // Check if access token needs refresh
       final isAccessTokenExpired = await repository.isAccessTokenExpired();
       if (isAccessTokenExpired) {
-        debugPrint('🔄 Access token expired - attempting refresh');
+        debugPrint('🔄 Access token expired — refreshing');
         try {
           await repository.refreshToken();
-          debugPrint('✅ Token refresh successful - user is authenticated');
         } catch (e) {
-          debugPrint('❌ Token refresh failed: $e - but keeping session (might be network issue)');
-          // Don't clear session immediately - could be a network issue
-          // The auth interceptor will handle this when making actual requests
+          debugPrint('❌ Token refresh failed: $e');
+          await repository.signOut();
+          state = AuthState.unauthenticated();
+          return;
         }
       }
 
-      // User is authenticated - tokens exist and session is valid
-      debugPrint('✅ User is authenticated');
-      
-      // Try to load stored user data first
+      // Always verify with the server before showing authenticated screens
+      debugPrint('🔄 Verifying session with server (init)...');
+      final sessionResult = await repository.checkSession();
+      debugPrint('🔄 Init session check result: $sessionResult');
+
+      if (sessionResult == SessionCheckResult.deviceRemoved) {
+        debugPrint('🔴 Server: device removed');
+        await repository.signOut();
+        state = AuthState.deviceRemoved();
+        return;
+      }
+
+      if (sessionResult == SessionCheckResult.sessionExpired) {
+        debugPrint('🔴 Server: session expired');
+        await repository.signOut();
+        state = AuthState.sessionExpired();
+        return;
+      }
+
+      // Server confirmed — now load user data
+      debugPrint('✅ Server confirmed — loading user');
       final storedUser = await repository.getStoredUserData();
       if (storedUser != null) {
-        debugPrint('✅ Loaded stored user data: ${storedUser.email}');
         state = AuthState.authenticated(storedUser);
-        
-        // Try to refresh user data in background
+        // Refresh user data in background (non-blocking)
         _fetchUserProfileInBackground();
       } else {
-        debugPrint('ℹ️ No stored user data, will fetch from server');
-        // Mark as authenticated but try to fetch user data
-        state = const AuthState(
-          isAuthenticated: true,
-          isInitialized: true,
-        );
-        
-        // Try to fetch current user data (don't await to avoid blocking)
-        _fetchUserProfileInBackground();
+        // No cached user — fetch from server (blocking, we need the data)
+        try {
+          final user = await repository.getCurrentUser();
+          state = AuthState.authenticated(user);
+        } catch (e) {
+          debugPrint('❌ Could not load user profile: $e');
+          await repository.signOut();
+          state = AuthState.unauthenticated();
+        }
       }
-      
     } catch (e) {
-      // If initialization fails, assume unauthenticated
-      debugPrint('⚠️ Auth initialization error: $e');
+      debugPrint('⚠️ Auth init error: $e');
       state = AuthState.unauthenticated();
     }
   }
@@ -204,6 +207,7 @@ class Auth extends _$Auth {
         password: password,
       );
 
+      debugPrint('✅ signIn success: user=${authResponse.user.email}, id=${authResponse.user.id}');
       state = AuthState.authenticated(authResponse.user);
     } on DeviceLimitFailure catch (e) {
       // Backend returned 403 with manage_devices: true
@@ -386,9 +390,14 @@ class Auth extends _$Auth {
         state = AuthState.authenticated(user);
       }
     } on AuthFailure catch (e) {
-      // 401 from /api/auth/me — session is invalid, sign out
-      debugPrint('🔴 Profile fetch returned 401 (${e.code}) — signing out');
-      await signOut();
+      // Only sign out on device_removed — other 401s (e.g. token just expired
+      // and interceptor is refreshing) should not immediately sign the user out.
+      if (e.code == 'device_removed') {
+        debugPrint('🔴 Profile fetch: device removed — signing out');
+        state = AuthState.deviceRemoved();
+      } else {
+        debugPrint('⚠️ Profile fetch auth failure (${e.code}) — keeping session');
+      }
     } catch (e) {
       // Network error — keep existing state, don't sign out
       debugPrint('⚠️ Failed to load user profile in background (network?): $e');

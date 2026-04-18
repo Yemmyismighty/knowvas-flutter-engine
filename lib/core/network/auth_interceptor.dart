@@ -35,7 +35,6 @@ class AuthInterceptor extends Interceptor {
       options.headers['X-Device-ID'] = 'mobile-unknown';
       final deviceId = await DeviceService.instance.getDeviceId();
       options.headers['X-Device-ID'] = deviceId;
-      _logger.d('X-Device-ID: $deviceId → ${options.path}');
 
       // Also send the human-readable device name so the backend doesn't have
       // to parse the Dart User-Agent string (which returns "Other").
@@ -54,9 +53,6 @@ class AuthInterceptor extends Interceptor {
 
       if (accessToken != null && accessToken.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $accessToken';
-        _logger.d('Added access token to request: ${options.path}');
-      } else {
-        _logger.w('No access token found for request: ${options.path}');
       }
 
       handler.next(options);
