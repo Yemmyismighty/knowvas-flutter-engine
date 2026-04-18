@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +20,12 @@ class KnowvasApp extends ConsumerStatefulWidget {
 }
 
 class _KnowvasAppState extends ConsumerState<KnowvasApp> with WidgetsBindingObserver {
+  Timer? _sessionPollTimer;
+  int _failureCount = 0;
+
+  static const _basePollInterval = Duration(seconds: 30);
+  static const _maxPollInterval = Duration(minutes: 2);
+
   @override
   void initState() {
     super.initState();
@@ -30,21 +38,59 @@ class _KnowvasAppState extends ConsumerState<KnowvasApp> with WidgetsBindingObse
       }
       final router = ref.read(routerProvider);
       PushNotificationService().setRouter(router);
+
+      // Start session polling once the app is fully initialised
+      _startPolling();
     });
   }
 
   @override
   void dispose() {
+    _sessionPollTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  /// Called when the app comes back to the foreground.
-  /// Mirrors the web's visibility/focus listener that calls checkSessionValidity().
+  void _startPolling() {
+    _sessionPollTimer?.cancel();
+    _sessionPollTimer = Timer(_basePollInterval, _pollSession);
+  }
+
+  Future<void> _pollSession() async {
+    final isAuthenticated = ref.read(authProvider).isAuthenticated;
+    if (!isAuthenticated) {
+      // Not logged in — no need to poll
+      _failureCount = 0;
+      return;
+    }
+
+    try {
+      await ref.read(authProvider.notifier).checkSessionValidity();
+      _failureCount = 0;
+      // Schedule next poll at base interval
+      _sessionPollTimer = Timer(_basePollInterval, _pollSession);
+    } catch (_) {
+      // Network error — back off exponentially, cap at max
+      _failureCount++;
+      final backoff = Duration(
+        milliseconds: (_basePollInterval.inMilliseconds *
+                (1 << _failureCount.clamp(0, 6)))
+            .clamp(0, _maxPollInterval.inMilliseconds),
+      );
+      _sessionPollTimer = Timer(backoff, _pollSession);
+    }
+  }
+
+  /// Called when the app comes back to the foreground — check immediately
+  /// then reset the poll timer, mirroring the web's visibilitychange handler.
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
     if (lifecycleState == AppLifecycleState.resumed) {
       ref.read(authProvider.notifier).checkSessionValidity();
+      _startPolling(); // reset timer so we don't double-fire
+    } else if (lifecycleState == AppLifecycleState.paused) {
+      // App going to background — pause polling to save battery
+      _sessionPollTimer?.cancel();
     }
   }
 

@@ -382,29 +382,16 @@ class Auth extends _$Auth {
       final repository = ref.read<AuthRepository>(authRepositoryProvider);
       final user = await repository.getCurrentUser();
       debugPrint('✅ User profile loaded in background: ${user.email}');
-      
-      // Only update state if still authenticated
       if (state.isAuthenticated) {
         state = AuthState.authenticated(user);
       }
+    } on AuthFailure catch (e) {
+      // 401 from /api/auth/me — session is invalid, sign out
+      debugPrint('🔴 Profile fetch returned 401 (${e.code}) — signing out');
+      await signOut();
     } catch (e) {
-      debugPrint('⚠️ Failed to load user profile in background: $e');
-      
-      // If we don't have any user data yet, create a fallback user
-      if (state.isAuthenticated && state.user == null) {
-        try {
-          final repository = ref.read<AuthRepository>(authRepositoryProvider);
-          final fallbackUser = await repository.createFallbackUser();
-          debugPrint('✅ Created fallback user for background fetch');
-          
-          if (state.isAuthenticated) {
-            state = AuthState.authenticated(fallbackUser);
-          }
-        } catch (fallbackError) {
-          debugPrint('❌ Failed to create fallback user: $fallbackError');
-          // Profile will be loaded on-demand when user visits profile screen
-        }
-      }
+      // Network error — keep existing state, don't sign out
+      debugPrint('⚠️ Failed to load user profile in background (network?): $e');
     }
   }
 }

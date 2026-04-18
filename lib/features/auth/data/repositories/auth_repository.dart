@@ -516,13 +516,13 @@ class AuthRepository {
     }
   }
 
-  /// Get current user profile
-  /// Fetches user data from the server using stored access token
-  /// Falls back to creating a basic user if server fetch fails
+  /// Get current user profile from the server.
+  /// Throws [AuthFailure] on 401 so the caller can sign the user out.
+  /// Throws [NetworkFailure] on network errors.
   Future<User> getCurrentUser() async {
     try {
       debugPrint('🔄 Fetching user profile from: ${ApiConstants.profile}');
-      
+
       final response = await _apiClient.get<Map<String, dynamic>>(
         ApiConstants.profile,
       );
@@ -531,19 +531,25 @@ class AuthRepository {
 
       if (response.statusCode == 200 && response.data != null) {
         final user = User.fromJson(response.data!);
-        
-        // Store updated user data
         await _storeUserData(user);
-        
         return user;
-      } else {
-        debugPrint('⚠️ Profile fetch failed with status: ${response.statusCode}');
-        return await createFallbackUser();
       }
+
+      if (response.statusCode == 401) {
+        // Session is invalid — caller must sign the user out
+        final reason = response.data?['reason'] as String? ?? 'invalid';
+        throw AuthFailure('Session invalid: $reason', code: reason);
+      }
+
+      debugPrint('⚠️ Profile fetch failed with status: ${response.statusCode}');
+      throw AuthFailure('Profile fetch failed', code: 'PROFILE_FAILED');
+    } on Failure {
+      rethrow;
+    } on NetworkException catch (e) {
+      throw NetworkFailure(e.message, code: e.code);
     } catch (e) {
-      debugPrint('❌ Profile fetch error: $e');
-      debugPrint('🔄 Creating fallback user...');
-      return await createFallbackUser();
+      if (e is Failure) rethrow;
+      throw NetworkFailure('Profile fetch error: $e', code: 'NETWORK_ERROR');
     }
   }
 
