@@ -51,20 +51,20 @@ class FeedItem extends Equatable {
     }
 
     return FeedItem(
-      id: json['id'] as int,
+      id: (json['id'] as num).toInt(),
       title: json['title'] as String? ?? '',
       author: json['author'] as String? ?? '',
-      authorId: json['authorId'] as int?,
+      authorId: (json['authorId'] as num?)?.toInt(),
       type: json['type'] as String? ?? 'book',
       imageUrl: json['imageUrl'] as String? ?? '',
       price: priceMap,
       isFree: json['isFree'] as bool? ?? false,
       isPremiumOnly: json['isPremiumOnly'] as bool? ?? false,
       rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
-      reviewCount: json['reviewCount'] as int? ?? 0,
+      reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       isWishlisted: json['isWishlisted'] as bool? ?? false,
       publishDate: json['publishDate'] as String?,
-      estimatedReadTime: json['estimatedReadTime'] as int?,
+      estimatedReadTime: (json['estimatedReadTime'] as num?)?.toInt(),
       description: json['description'] as String?,
       progress: (json['progress'] as num?)?.toDouble(),
     );
@@ -118,12 +118,12 @@ class FeedCreator extends Equatable {
 
   factory FeedCreator.fromJson(Map<String, dynamic> json) {
     return FeedCreator(
-      id: json['id'] as int,
+      id: (json['id'] as num).toInt(),
       name: json['name'] as String? ?? '',
       bio: json['bio'] as String? ?? '',
       profilePicture: json['profilePicture'] as String? ?? '',
-      contentCount: json['contentCount'] as int? ?? 0,
-      followersCount: json['followersCount'] as int? ?? 0,
+      contentCount: (json['contentCount'] as num?)?.toInt() ?? 0,
+      followersCount: (json['followersCount'] as num?)?.toInt() ?? 0,
       isFollowing: json['isFollowing'] as bool? ?? false,
     );
   }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 const _kDeviceIdKey = 'knowvas_device_id';
@@ -10,44 +11,52 @@ const _kDeviceNameKey = 'knowvas_device_name';
 
 /// Provides a stable unique device ID and a human-readable device name.
 ///
-/// The device ID is a UUID persisted in secure storage — unique per app install,
-/// stable across restarts, and not affected by OS build fingerprints being shared
-/// across devices. It is prefixed with the platform for readability.
+/// The device ID is a UUID persisted in BOTH secure storage AND SharedPreferences.
+/// Using two stores makes it resilient to debug hot-restarts (which can clear
+/// the in-memory cache) and to occasional secure storage read failures.
+/// The ID is generated once per install and never changes.
 class DeviceService {
   DeviceService._();
 
   static final DeviceService instance = DeviceService._();
 
-  final _storage = const FlutterSecureStorage();
+  final _secure = const FlutterSecureStorage();
   final _plugin = DeviceInfoPlugin();
 
   String? _cachedId;
   String? _cachedName;
 
   /// Returns a stable unique device ID.
-  /// Generated once per install and persisted in secure storage.
   Future<String> getDeviceId() async {
     if (_cachedId != null) return _cachedId!;
 
-    // Check if we already have a persisted ID for this install
+    // 1. Try secure storage first
     try {
-      final stored = await _storage.read(key: _kDeviceIdKey);
-      if (stored != null && stored.isNotEmpty) {
-        // Migrate away from the old build-fingerprint format (android-UP1A.xxx)
-        // which is NOT unique per device — it's the same on every phone running
-        // that Android build. Detect it by checking if it looks like a build ID
-        // rather than a UUID (UUIDs contain hyphens in the pattern xxxxxxxx-xxxx-...).
-        final isOldFormat = _isOldBuildFingerprintFormat(stored);
-        if (!isOldFormat) {
-          _cachedId = stored;
-          return _cachedId!;
-        }
-        // Old format — fall through to generate a new UUID-based ID
-        debugPrint('⚠️ DeviceService: migrating old device ID format: $stored');
+      final stored = await _secure.read(key: _kDeviceIdKey);
+      if (stored != null && stored.isNotEmpty && !_isOldFormat(stored)) {
+        _cachedId = stored;
+        // Back-fill SharedPreferences in case it's missing
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kDeviceIdKey, stored);
+        return _cachedId!;
       }
     } catch (_) {}
 
-    // Generate a new UUID-based ID, prefixed with platform
+    // 2. Fall back to SharedPreferences (survives hot restarts in debug)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString(_kDeviceIdKey);
+      if (stored != null && stored.isNotEmpty && !_isOldFormat(stored)) {
+        _cachedId = stored;
+        // Back-fill secure storage
+        try {
+          await _secure.write(key: _kDeviceIdKey, value: stored);
+        } catch (_) {}
+        return _cachedId!;
+      }
+    } catch (_) {}
+
+    // 3. Generate a new UUID — first install or migration
     try {
       final prefix = Platform.isAndroid
           ? 'android'
@@ -55,31 +64,24 @@ class DeviceService {
               ? 'ios'
               : 'mobile';
       _cachedId = '$prefix-${const Uuid().v4()}';
-    } catch (e) {
+    } catch (_) {
       _cachedId = 'mobile-${const Uuid().v4()}';
     }
 
+    // Persist to both stores
     try {
-      await _storage.write(key: _kDeviceIdKey, value: _cachedId);
+      await _secure.write(key: _kDeviceIdKey, value: _cachedId);
+    } catch (_) {}
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kDeviceIdKey, _cachedId!);
     } catch (_) {}
 
     debugPrint('✅ DeviceService: device ID: $_cachedId');
     return _cachedId!;
   }
 
-  /// Detects the old build-fingerprint format like "android-UP1A.231005.007"
-  /// vs the new UUID format like "android-550e8400-e29b-41d4-a716-446655440000".
-  /// UUIDs always have exactly 4 hyphens in the UUID portion; build IDs have dots.
-  bool _isOldBuildFingerprintFormat(String id) {
-    // New format: "android-{uuid}" where uuid has pattern 8-4-4-4-12 hex chars
-    final uuidPattern = RegExp(
-      r'^(android|ios|mobile)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-      caseSensitive: false,
-    );
-    return !uuidPattern.hasMatch(id);
-  }
-
-  /// Returns a human-readable device name, e.g. "Samsung Galaxy S23" or "iPhone 15 Pro".
+  /// Returns a human-readable device name.
   Future<String> getDeviceName() async {
     if (_cachedName != null) return _cachedName!;
 
@@ -93,14 +95,20 @@ class DeviceService {
       } else {
         _cachedName = 'Unknown Device';
       }
-    } catch (e) {
+    } catch (_) {
       _cachedName = 'Mobile Device';
     }
 
-    try {
-      await _storage.write(key: _kDeviceNameKey, value: _cachedName);
-    } catch (_) {}
-
     return _cachedName!;
+  }
+
+  /// Detects the old build-fingerprint format (android-UP1A.231005.007)
+  /// vs the new UUID format (android-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+  bool _isOldFormat(String id) {
+    final uuidPattern = RegExp(
+      r'^(android|ios|mobile)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    );
+    return !uuidPattern.hasMatch(id);
   }
 }

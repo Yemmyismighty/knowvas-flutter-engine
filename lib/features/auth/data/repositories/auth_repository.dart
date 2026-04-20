@@ -29,6 +29,16 @@ class AuthRepository {
   final ApiClient _apiClient;
   final SecureStorage _secureStorage;
 
+  /// Returns device identification headers for auth requests.
+  /// The AuthInterceptor is not used on the auth API client (circular dep),
+  /// so we inject these manually on every request.
+  Future<Map<String, String>> _deviceHeaders() async {
+    return {
+      'X-Device-ID': await DeviceService.instance.getDeviceId(),
+      'X-Device-Name': await DeviceService.instance.getDeviceName(),
+    };
+  }
+
   /// Sign in with email and password
   /// Returns AuthResponse with tokens and user data
   /// Throws AuthFailure on authentication errors
@@ -47,6 +57,7 @@ class AuthRepository {
           'use_jwt': true,
           'deviceName': await DeviceService.instance.getDeviceName(),
         },
+        options: Options(headers: await _deviceHeaders()),
       );
 
       // Handle successful response
@@ -127,10 +138,7 @@ class AuthRepository {
 
   /// Sign up with user details
   /// Sends verification code to email
-  /// Does NOT return tokens - user must verify email first
-  /// Throws AuthFailure on validation or registration errors
-  /// Throws NetworkFailure on network errors
-  /// Throws ServerFailure on server errors
+  /// Stores the verification_token for use during email verification
   Future<void> signUp({
     required SignUpData signUpData,
   }) async {
@@ -138,24 +146,26 @@ class AuthRepository {
       final response = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.signup,
         data: signUpData.toJson(),
+        options: Options(headers: await _deviceHeaders()),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Signup successful - verification code sent to email
-        // Don't store tokens yet - user needs to verify email
+        // Store the verification token so verifyEmail can send it back
+        final token = response.data?['verification_token'] as String?;
+        if (token != null) {
+          await _secureStorage.write(
+            key: StorageKeys.verificationToken,
+            value: token,
+          );
+        }
         return;
       }
-      
-      // Handle error response
+
       final data = response.data;
       String errorMessage = 'Sign up failed';
-      
       if (data is Map<String, dynamic>) {
-        errorMessage = data['error'] as String? ?? 
-                     data['message'] as String? ?? 
-                     errorMessage;
+        errorMessage = data['error'] as String? ?? data['message'] as String? ?? errorMessage;
       }
-      
       throw AuthFailure(errorMessage, code: 'SIGN_UP_FAILED');
     } on Failure {
       rethrow;
@@ -189,41 +199,49 @@ class AuthRepository {
     required String code,
   }) async {
     try {
+      final headers = await _deviceHeaders();
+      final storedAccessToken = await _secureStorage.read(key: StorageKeys.accessToken);
+      if (storedAccessToken != null) headers['Authorization'] = 'Bearer $storedAccessToken';
+
+      // Include the verification token so the backend can verify without a session cookie
+      final verificationToken = await _secureStorage.read(key: StorageKeys.verificationToken);
+
       final response = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.verifyEmail,
         data: {
           'email': email,
           'code': code,
-          'use_jwt': true, // Request JWT tokens for mobile
+          'use_jwt': true,
+          if (verificationToken != null) 'verification_token': verificationToken,
         },
+        options: Options(headers: headers),
       );
 
       if (response.statusCode == 200 && response.data != null) {
         final authResponse = AuthResponse.fromJson(response.data!);
-        
-        // Store tokens securely
+
         await _storeTokens(
           accessToken: authResponse.accessToken,
           refreshToken: authResponse.refreshToken,
           userId: authResponse.user.id,
         );
-
-        // Store user data
         await _storeUserData(authResponse.user);
+        // Clean up the verification token — no longer needed
+        await _secureStorage.delete(key: StorageKeys.verificationToken);
 
         return authResponse;
       }
-      
+
       // Handle error response
       final data = response.data;
       String errorMessage = 'Email verification failed';
-      
+
       if (data is Map<String, dynamic>) {
-        errorMessage = data['error'] as String? ?? 
-                     data['message'] as String? ?? 
+        errorMessage = data['error'] as String? ??
+                     data['message'] as String? ??
                      errorMessage;
       }
-      
+
       throw AuthFailure(errorMessage, code: 'VERIFICATION_FAILED');
     } on Failure {
       rethrow;
@@ -418,23 +436,28 @@ class AuthRepository {
   /// Returns ok, sessionExpired, or deviceRemoved.
   Future<SessionCheckResult> checkSession() async {
     try {
+      final accessToken = await _secureStorage.read(key: StorageKeys.accessToken);
+      final headers = await _deviceHeaders();
+      if (accessToken != null) headers['Authorization'] = 'Bearer $accessToken';
+
       final response = await _apiClient.get<Map<String, dynamic>>(
         ApiConstants.profile,
+        options: Options(headers: headers),
       );
 
-      debugPrint('🔍 checkSession: status=${response.statusCode} reason=${response.data?['reason']}');
+      final reason = response.data?['reason'] as String?;
+      debugPrint('🔍 checkSession: status=${response.statusCode} reason=$reason');
 
       if (response.statusCode == 200) return SessionCheckResult.ok;
 
       if (response.statusCode == 401) {
-        final reason = response.data?['reason'] as String?;
         if (reason == 'device_removed') return SessionCheckResult.deviceRemoved;
         return SessionCheckResult.sessionExpired;
       }
 
       return SessionCheckResult.ok;
     } catch (e) {
-      debugPrint('⚠️ checkSession error (network?): $e');
+      debugPrint('⚠️ checkSession error: $e');
       return SessionCheckResult.ok;
     }
   }
@@ -524,8 +547,13 @@ class AuthRepository {
     try {
       debugPrint('🔄 Fetching user profile from: ${ApiConstants.profile}');
 
+      final accessToken = await _secureStorage.read(key: StorageKeys.accessToken);
+      final headers = await _deviceHeaders();
+      if (accessToken != null) headers['Authorization'] = 'Bearer $accessToken';
+
       final response = await _apiClient.get<Map<String, dynamic>>(
         ApiConstants.profile,
+        options: Options(headers: headers),
       );
 
       debugPrint('📡 Profile response: ${response.statusCode} - ${response.data}');
@@ -537,7 +565,6 @@ class AuthRepository {
       }
 
       if (response.statusCode == 401) {
-        // Session is invalid — caller must sign the user out
         final reason = response.data?['reason'] as String? ?? 'invalid';
         throw AuthFailure('Session invalid: $reason', code: reason);
       }
@@ -776,6 +803,7 @@ class AuthRepository {
           'idToken': idToken,
           'deviceName': realDeviceName,
         },
+        options: Options(headers: await _deviceHeaders()),
       );
 
       if (response.statusCode == 200 && response.data != null) {
@@ -819,13 +847,17 @@ class AuthRepository {
     }
   }
 
-  /// Complete user profile with DOB, gender, and city  /// Matches web app's /api/auth/complete-profile endpoint
+  /// Complete user profile with DOB, gender, and city
   Future<void> completeProfile({
     required String dateOfBirth,
     required String gender,
     required String city,
   }) async {
     try {
+      final storedAccessToken = await _secureStorage.read(key: StorageKeys.accessToken);
+      final headers = await _deviceHeaders();
+      if (storedAccessToken != null) headers['Authorization'] = 'Bearer $storedAccessToken';
+
       final response = await _apiClient.post<Map<String, dynamic>>(
         ApiConstants.completeProfile,
         data: {
@@ -833,6 +865,7 @@ class AuthRepository {
           'gender': gender,
           'city': city,
         },
+        options: Options(headers: headers),
       );
 
       if (response.statusCode == 200) return;

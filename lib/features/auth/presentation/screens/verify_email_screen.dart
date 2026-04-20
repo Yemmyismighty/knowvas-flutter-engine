@@ -169,35 +169,43 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                                 borderRadius: BorderRadius.circular(24),
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.all(32),
-                                child: Form(
+                                padding: EdgeInsets.all(
+                                  MediaQuery.of(context).size.width < 360 ? 16 : 24,
+                                ),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final w = constraints.maxWidth;
+                                    final isSmall = w < 300;
+                                    return Form(
                                   key: _formKey,
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      _buildLogo(),
-                                      const SizedBox(height: 32),
-                                      _buildHeader(),
-                                      const SizedBox(height: 32),
+                                      _buildLogo(isSmall),
+                                      SizedBox(height: isSmall ? 16 : 24),
+                                      _buildHeader(isSmall),
+                                      SizedBox(height: isSmall ? 16 : 24),
                                       // Error message
                                       if (_error != null) ...[
                                         _buildErrorMessage(_error!),
-                                        const SizedBox(height: 16),
+                                        const SizedBox(height: 12),
                                       ],
                                       // Success message for resend
                                       if (_resendSuccess) ...[
                                         _buildSuccessMessage(),
-                                        const SizedBox(height: 16),
+                                        const SizedBox(height: 12),
                                       ],
                                       _buildCodeField(),
-                                      const SizedBox(height: 24),
+                                      const SizedBox(height: 20),
                                       _buildVerifyButton(),
-                                      const SizedBox(height: 24),
+                                      const SizedBox(height: 16),
                                       _buildResendSection(),
-                                      const SizedBox(height: 24),
+                                      const SizedBox(height: 16),
                                       _buildSignInLink(),
                                     ],
                                   ),
+                                );
+                                  },
                                 ),
                               ),
                             ),
@@ -342,66 +350,73 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     );
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo(bool isSmall) {
+    final logoSize = isSmall ? 36.0 : 48.0;
+    final fontSize = isSmall ? 18.0 : 22.0;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: Image.asset(
             'assets/logo.png',
-            width: 48,
-            height: 48,
+            width: logoSize,
+            height: logoSize,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
               return Container(
-                width: 48,
-                height: 48,
+                width: logoSize,
+                height: logoSize,
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [AppTheme.brand600, AppTheme.brand800],
                   ),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.menu_book, color: Colors.white, size: 28),
+                child: Icon(Icons.menu_book, color: Colors.white, size: logoSize * 0.55),
               );
             },
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(
             colors: [AppTheme.brand600, AppTheme.brand800],
           ).createShader(bounds),
           child: Text(
             'Knowvas',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isSmall) {
     return Column(
       children: [
         Text(
           'Verify Your Email',
-          style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: TextStyle(
+            fontSize: isSmall ? 20.0 : 24.0,
+            fontWeight: FontWeight.bold,
+          ),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           'We sent a code to ${widget.email}',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: Colors.grey[600],
-              ),
+          style: TextStyle(
+            fontSize: isSmall ? 12.0 : 14.0,
+            color: Colors.grey[600],
+          ),
           textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
         ),
       ],
     );
@@ -561,38 +576,35 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   }
 
   Widget _buildResendSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          "Didn't receive the code?",
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey[700],
-          ),
+          "Didn't receive the code? ",
+          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
         ),
-        const SizedBox(height: 8),
-        OutlinedButton(
+        TextButton(
           onPressed: _isResending ? null : _handleResendCode,
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            side: BorderSide(color: Colors.grey[300]!),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(0, 0),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           child: _isResending
               ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.brand600),
+                  ),
                 )
               : const Text(
-                  'Resend Code',
+                  'Resend',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.brand600,
                   ),
                 ),
         ),
@@ -608,15 +620,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
           top: BorderSide(color: Colors.grey[300]!),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(
             'Already verified? ',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
           ),
           TextButton(
             onPressed: () => context.go('/auth/sign-in'),
@@ -626,11 +636,8 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: const Text(
-              'Sign in to your account',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              'Sign in',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
           ),
         ],

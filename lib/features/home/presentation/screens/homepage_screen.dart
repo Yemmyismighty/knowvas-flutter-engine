@@ -127,6 +127,12 @@ class HomepageScreen extends ConsumerWidget {
     final feed = state.feedResponse?.feed ?? [];
     final isPersonalised = state.feedResponse?.isPersonalised ?? false;
 
+    // Collect all non-continue_reading, non-creator_spotlight items for the featured card
+    final allItems = feed
+        .where((s) => s.type != 'continue_reading' && s.type != 'creator_spotlight' && s.type != 'stats_nudge')
+        .expand((s) => s.items)
+        .toList();
+
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
@@ -183,6 +189,15 @@ class HomepageScreen extends ConsumerWidget {
           ),
         ),
 
+        // Featured Card — rotating every 10 minutes from feed items
+        if (allItems.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: _FeaturedCard(items: allItems),
+            ),
+          ),
+
         // Feed sections
         if (feed.isEmpty && !state.isLoading)
           const SliverFillRemaining(
@@ -193,6 +208,16 @@ class HomepageScreen extends ConsumerWidget {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final section = feed[index];
+                // Insert membership hook after the 3rd section
+                if (index == 3) {
+                  return Column(children: [
+                    _buildSection(context, section),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: _MembershipHookCard(),
+                    ),
+                  ]);
+                }
                 return _buildSection(context, section);
               },
               childCount: feed.length,
@@ -250,6 +275,247 @@ class HomepageScreen extends ConsumerWidget {
           : '';
       context.push('/discover$query');
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Featured Card — rotating every 10 minutes, mirrors web's FeaturedCard
+// ---------------------------------------------------------------------------
+class _FeaturedCard extends StatelessWidget {
+  const _FeaturedCard({required this.items});
+  final List<FeedItem> items;
+
+  FeedItem _pickItem() {
+    final quality = items.where((i) => i.rating > 0).toList();
+    final pool = quality.isNotEmpty ? quality : items;
+    final bucket = DateTime.now().millisecondsSinceEpoch ~/ (10 * 60 * 1000);
+    return pool[bucket % pool.length];
+  }
+
+  String _priceLabel(FeedItem item) {
+    if (item.isFree) return 'Free';
+    if (item.isPremiumOnly) return 'Members Only';
+    final ngn = item.price['NGN'] ?? item.price['USD'] ?? 0;
+    if (ngn == 0) return 'Free';
+    return '₦${ngn.toStringAsFixed(0)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = _pickItem();
+    return GestureDetector(
+      onTap: () => context.push('/content/${item.id}'),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.brand600.withOpacity(0.12),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Cover
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                bottomLeft: Radius.circular(20),
+              ),
+              child: CachedNetworkImage(
+                imageUrl: item.imageUrl,
+                width: 110,
+                height: 160,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => Container(
+                  width: 110,
+                  height: 160,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.brand600, AppTheme.brand800],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: const Icon(Icons.menu_book, color: Colors.white, size: 40),
+                ),
+              ),
+            ),
+            // Info
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.brand100,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('Featured',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.brand700)),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87)),
+                    const SizedBox(height: 4),
+                    Text('by ${item.author}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                    if (item.rating > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        const Icon(Icons.star_rounded,
+                            size: 14, color: Colors.amber),
+                        const SizedBox(width: 3),
+                        Text(item.rating.toStringAsFixed(1),
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 4),
+                        Text('(${item.reviewCount})',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade500)),
+                      ]),
+                    ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 8),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppTheme.brand600, AppTheme.brand800],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text('Read Now',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.brand50,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(_priceLabel(item),
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.brand700)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Membership Hook Card — mirrors web's right-side subscription promo
+// ---------------------------------------------------------------------------
+class _MembershipHookCard extends StatelessWidget {
+  const _MembershipHookCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.brand600, AppTheme.brand800],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.brand600.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.workspace_premium_rounded,
+                color: Colors.amber, size: 20),
+            const SizedBox(width: 8),
+            const Text('Knowvas Membership',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15)),
+          ]),
+          const SizedBox(height: 10),
+          ...[
+            'Unlimited access to all books',
+            'Read on up to 3 devices',
+            'Exclusive member-only titles',
+            'Ad-free reading experience',
+          ].map((perk) => Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Row(children: [
+                  const Icon(Icons.check_circle_rounded,
+                      size: 14, color: Colors.greenAccent),
+                  const SizedBox(width: 8),
+                  Text(perk,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12)),
+                ]),
+              )),
+          const SizedBox(height: 14),
+          GestureDetector(
+            onTap: () => context.push('/pricing'),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text('View Plans',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: AppTheme.brand700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

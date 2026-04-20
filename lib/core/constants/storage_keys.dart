@@ -11,6 +11,7 @@ class StorageKeys {
   static const String refreshTokenExpiry = 'refresh_token_expiry';
   static const String lastLoginTime = 'last_login_time';
   static const String userData = 'user_data';
+  static const String verificationToken = 'verification_token';
 
   // Shared preferences keys
   static const String isFirstLaunch = 'is_first_launch';

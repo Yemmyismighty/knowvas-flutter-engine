@@ -29,11 +29,9 @@ class _ContentCarouselState extends State<ContentCarousel> {
 
   void _handleFlipRequest(int cardId) {
     setState(() {
-      // If the same card is tapped, flip it back
       if (_flippedCardId == cardId) {
         _flippedCardId = null;
       } else {
-        // Otherwise, flip the new card (and unflip the previous one)
         _flippedCardId = cardId;
       }
     });
@@ -50,33 +48,37 @@ class _ContentCarouselState extends State<ContentCarousel> {
       children: [
         // Header
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                widget.title,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (widget.onViewAll != null)
                 TextButton(
                   onPressed: widget.onViewAll,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                   child: const Text(
                     'View All',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
         // Content list
         SizedBox(
           height: _getCarouselHeight(),
@@ -87,7 +89,7 @@ class _ContentCarouselState extends State<ContentCarousel> {
             itemBuilder: (context, index) {
               final content = widget.contents[index];
               return Padding(
-                padding: const EdgeInsets.only(right: 16),
+                padding: const EdgeInsets.only(right: 12),
                 child: ContentCard(
                   key: ValueKey('content_${content.id}'),
                   id: content.id,
@@ -119,12 +121,9 @@ class _ContentCarouselState extends State<ContentCarousel> {
 
   double _getCarouselHeight() {
     switch (widget.size) {
-      case ContentCardSize.small:
-        return 200;
-      case ContentCardSize.medium:
-        return 240;
-      case ContentCardSize.large:
-        return 280;
+      case ContentCardSize.small:  return 164; // 160 + 4
+      case ContentCardSize.medium: return 212; // 208 + 4
+      case ContentCardSize.large:  return 260; // 256 + 4
     }
   }
 }

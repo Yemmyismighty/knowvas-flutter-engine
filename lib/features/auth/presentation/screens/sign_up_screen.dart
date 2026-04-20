@@ -187,47 +187,55 @@ class _SignUpFormState extends ConsumerState<_SignUpForm>
       opacity: _fade,
       child: SlideTransition(
         position: _slide,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: 8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final titleSize = w < 340 ? 22.0 : 26.0;
+            final subtitleSize = w < 340 ? 12.0 : 14.0;
+            final cardPadding = w < 340 ? 16.0 : 20.0;
+            final logoSize = w < 340 ? 56.0 : 64.0;
 
-            Center(
-              child: Column(children: [
-                Container(
-                  width: 72, height: 72,
-                  decoration: BoxDecoration(
-                    color: Colors.white, shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 24)],
-                  ),
-                  child: ClipOval(child: Image.asset('assets/logo.png', fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        const Icon(Icons.menu_book_rounded, color: AppTheme.brandPrimary, size: 36))),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 8),
+
+                Center(
+                  child: Column(children: [
+                    Container(
+                      width: logoSize, height: logoSize,
+                      decoration: BoxDecoration(
+                        color: Colors.white, shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 24)],
+                      ),
+                      child: ClipOval(child: Image.asset('assets/logo.png', fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            Icon(Icons.menu_book_rounded, color: AppTheme.brandPrimary, size: logoSize * 0.5))),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Create account',
+                        style: TextStyle(color: Colors.white, fontSize: titleSize, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text('Join thousands of readers on Knowvas',
+                        style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: subtitleSize),
+                        textAlign: TextAlign.center),
+                  ]),
                 ),
-                const SizedBox(height: 20),
-                const Text('Create account',
-                    style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                Text('Join thousands of readers on Knowvas',
-                    style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 15),
-                    textAlign: TextAlign.center),
-              ]),
-            ),
 
-            const SizedBox(height: 32),
+                const SizedBox(height: 24),
 
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.15)),
-              ),
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withOpacity(0.15)),
+                  ),
+                  padding: EdgeInsets.all(cardPadding),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                     if (error != null) ...[
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -406,9 +414,11 @@ class _SignUpFormState extends ConsumerState<_SignUpForm>
               ),
             ]),
           ],
-        ),
-      ),
-    );
+        ); // LayoutBuilder
+      },
+    ),
+  ),
+);
   }
 }
 

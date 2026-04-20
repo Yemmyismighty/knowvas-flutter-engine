@@ -20,6 +20,7 @@ class ApiConstants {
   static const String profile = '/api/auth/me';  // Get current user profile
   static const String completeProfile = '/api/auth/complete-profile';  // Complete profile (DOB, gender, city)
   static const String googleLogin = '/api/auth/google-login';  // Google OAuth login/signup
+  static const String cities = '/api/auth/cities';  // Cities by country code
 
   // Content endpoints
   static const String content = '/api/contents';

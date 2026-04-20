@@ -112,48 +112,50 @@ class _LandingScreenState extends State<LandingScreen>
                 // Main content
                 SafeArea(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: size.width < 360 ? 20 : 28,
+                    ),
                     child: Column(
                       children: [
-                        SizedBox(height: size.height * 0.06),
+                        SizedBox(height: size.height * 0.05),
 
                         // Logo
                         Transform.scale(
                           scale: _logoScale.value,
                           child: Transform.translate(
                             offset: Offset(0, _float.value * 0.5),
-                            child: _buildLogo(),
+                            child: _buildLogo(size),
                           ),
                         ),
 
-                        SizedBox(height: size.height * 0.05),
+                        SizedBox(height: size.height * 0.04),
 
                         // Hero text
                         FadeTransition(
                           opacity: _textFade,
                           child: SlideTransition(
                             position: _textSlide,
-                            child: _buildHeroText(context),
+                            child: _buildHeroText(context, size),
                           ),
                         ),
 
-                        SizedBox(height: size.height * 0.05),
+                        SizedBox(height: size.height * 0.04),
 
                         // Feature pills
-                        _buildFeaturePills(),
+                        _buildFeaturePills(size),
 
-                        SizedBox(height: size.height * 0.06),
+                        SizedBox(height: size.height * 0.05),
 
                         // Buttons
                         FadeTransition(
                           opacity: _btnsFade,
                           child: SlideTransition(
                             position: _btnsSlide,
-                            child: _buildButtons(context),
+                            child: _buildButtons(context, size),
                           ),
                         ),
 
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),
@@ -207,12 +209,14 @@ class _LandingScreenState extends State<LandingScreen>
     );
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo(Size size) {
+    final logoSize = size.width < 360 ? 72.0 : 88.0;
+    final fontSize = size.width < 360 ? 22.0 : 26.0;
     return Column(
       children: [
         Container(
-          width: 88,
-          height: 88,
+          width: logoSize,
+          height: logoSize,
           decoration: BoxDecoration(
             color: Colors.white,
             shape: BoxShape.circle,
@@ -227,15 +231,15 @@ class _LandingScreenState extends State<LandingScreen>
           child: ClipOval(
             child: Image.asset('assets/logo.png', fit: BoxFit.cover,
               errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.menu_book_rounded, color: AppTheme.brandPrimary, size: 44)),
+                  Icon(Icons.menu_book_rounded, color: AppTheme.brandPrimary, size: logoSize * 0.5)),
           ),
         ),
-        const SizedBox(height: 14),
-        const Text(
+        const SizedBox(height: 12),
+        Text(
           'Knowvas',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 28,
+            fontSize: fontSize,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.5,
           ),
@@ -244,14 +248,17 @@ class _LandingScreenState extends State<LandingScreen>
     );
   }
 
-  Widget _buildHeroText(BuildContext context) {
+  Widget _buildHeroText(BuildContext context, Size size) {
+    final h1 = size.width < 360 ? 26.0 : size.width < 400 ? 30.0 : 34.0;
+    final h2 = size.width < 360 ? 30.0 : size.width < 400 ? 34.0 : 38.0;
+    final body = size.width < 360 ? 13.0 : 15.0;
     return Column(
       children: [
-        const Text(
+        Text(
           'Your Digital Reading',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 36,
+            fontSize: h1,
             fontWeight: FontWeight.w800,
             height: 1.1,
           ),
@@ -262,24 +269,24 @@ class _LandingScreenState extends State<LandingScreen>
           shaderCallback: (bounds) => const LinearGradient(
             colors: [Color(0xFFE879F9), Color(0xFFFBBF24)],
           ).createShader(bounds),
-          child: const Text(
+          child: Text(
             'Sanctuary',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 42,
+              fontSize: h2,
               fontWeight: FontWeight.w900,
               height: 1.1,
             ),
             textAlign: TextAlign.center,
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         Text(
-          'Discover extraordinary stories, connect with\nbrilliant creators, and immerse yourself in\na world of knowledge.',
+          'Discover extraordinary stories, connect with brilliant creators, and immerse yourself in a world of knowledge.',
           style: TextStyle(
             color: Colors.white.withOpacity(0.75),
-            fontSize: 16,
-            height: 1.7,
+            fontSize: body,
+            height: 1.6,
           ),
           textAlign: TextAlign.center,
         ),
@@ -287,7 +294,9 @@ class _LandingScreenState extends State<LandingScreen>
     );
   }
 
-  Widget _buildFeaturePills() {
+  Widget _buildFeaturePills(Size size) {
+    final pillFontSize = size.width < 360 ? 11.0 : 13.0;
+    final emojiSize = size.width < 360 ? 12.0 : 14.0;
     final features = [
       ('📚', 'Vast Library'),
       ('🎧', 'Audiobooks'),
@@ -302,8 +311,8 @@ class _LandingScreenState extends State<LandingScreen>
       builder: (context, _) {
         return Wrap(
           alignment: WrapAlignment.center,
-          spacing: 10,
-          runSpacing: 10,
+          spacing: 8,
+          runSpacing: 8,
           children: List.generate(features.length, (i) {
             final delay = i * 0.12;
             final progress = (((_cardsCtrl.value - delay) / (1.0 - delay)).clamp(0.0, 1.0));
@@ -314,7 +323,10 @@ class _LandingScreenState extends State<LandingScreen>
               child: Opacity(
                 opacity: progress.clamp(0.0, 1.0),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: size.width < 360 ? 10 : 12,
+                    vertical: 7,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
@@ -323,13 +335,13 @@ class _LandingScreenState extends State<LandingScreen>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(features[i].$1, style: const TextStyle(fontSize: 14)),
-                      const SizedBox(width: 6),
+                      Text(features[i].$1, style: TextStyle(fontSize: emojiSize)),
+                      const SizedBox(width: 5),
                       Text(
                         features[i].$2,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
-                          fontSize: 13,
+                          fontSize: pillFontSize,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -344,12 +356,14 @@ class _LandingScreenState extends State<LandingScreen>
     );
   }
 
-  Widget _buildButtons(BuildContext context) {
+  Widget _buildButtons(BuildContext context, Size size) {
+    final btnHeight = size.width < 360 ? 50.0 : 54.0;
+    final btnFontSize = size.width < 360 ? 14.0 : 15.0;
     return Column(
       children: [
         SizedBox(
           width: double.infinity,
-          height: 58,
+          height: btnHeight,
           child: ElevatedButton(
             onPressed: () {
               HapticFeedback.mediumImpact();
@@ -358,17 +372,17 @@ class _LandingScreenState extends State<LandingScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: AppTheme.brandPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               elevation: 0,
             ),
-            child: const Text('Get Started — It\'s Free',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            child: Text("Get Started — It's Free",
+                style: TextStyle(fontSize: btnFontSize, fontWeight: FontWeight.w700)),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          height: 58,
+          height: btnHeight,
           child: OutlinedButton(
             onPressed: () {
               HapticFeedback.lightImpact();
@@ -377,16 +391,16 @@ class _LandingScreenState extends State<LandingScreen>
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white,
               side: BorderSide(color: Colors.white.withOpacity(0.5), width: 1.5),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text('I already have an account',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            child: Text('I already have an account',
+                style: TextStyle(fontSize: btnFontSize - 1, fontWeight: FontWeight.w600)),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         Text(
           'By continuing, you agree to our Terms & Privacy Policy',
-          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
+          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
           textAlign: TextAlign.center,
         ),
       ],

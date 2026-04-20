@@ -12,12 +12,12 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final retryInterceptor = ref.watch(retryInterceptorProvider);
   final logger = ref.watch(loggerProvider);
 
-  // Create a separate API client without auth interceptor for auth operations
+  // Create a separate API client without auth interceptor for auth operations.
+  // X-Device-ID and X-Device-Name are injected manually in each repository method.
   final authApiClient = ApiClient(
     baseUrl: ApiConstants.baseUrl,
     retryInterceptor: retryInterceptor,
     logger: logger,
-    // No auth interceptor to avoid circular dependency
   );
 
   return AuthRepository(

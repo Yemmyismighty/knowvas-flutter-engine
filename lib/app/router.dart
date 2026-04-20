@@ -403,6 +403,7 @@ class _RouterNotifier extends ChangeNotifier {
     final isInitialized = authState.isInitialized;
     final isAuthenticated = authState.isAuthenticated;
     final sessionTerminated = authState.sessionTerminated;
+    final user = authState.user;
     final loc = state.matchedLocation;
     final isGoingToAuth = loc.startsWith('/auth');
     final isOnRoot = loc == '/';
@@ -420,7 +421,11 @@ class _RouterNotifier extends ChangeNotifier {
 
     // Root: decide where to send the user
     if (isOnRoot) {
-      if (isAuthenticated) return '/home';
+      if (isAuthenticated) {
+        // Check profile completion before sending to home
+        if (user != null && !user.hasCompletedProfile) return '/auth/welcome';
+        return '/home';
+      }
       final onboardingDone = onboardingAsync.valueOrNull ?? true;
       return onboardingDone ? '/landing' : '/onboarding';
     }
@@ -428,8 +433,24 @@ class _RouterNotifier extends ChangeNotifier {
     // Onboarding: skip if already authenticated
     if (isAuthenticated && isOnboarding) return '/home';
 
-    // Authenticated users don't need auth screens
-    if (isAuthenticated && isGoingToAuth) return '/home';
+    // Authenticated users don't need auth screens (except welcome)
+    if (isAuthenticated && isGoingToAuth && loc != '/auth/welcome') return '/home';
+
+    // Profile completion guard — mirrors web's useProfileCompletion hook.
+    // Authenticated users without DOB+gender must complete their profile.
+    // Allowed routes that don't require profile completion:
+    if (isAuthenticated && user != null && !user.hasCompletedProfile) {
+      const allowedWithoutProfile = [
+        '/auth/welcome',
+        '/auth/sign-in',
+        '/auth/sign-up',
+        '/auth/verify-email',
+        '/auth/forgot-password',
+        '/auth/reset-password',
+      ];
+      final isAllowed = allowedWithoutProfile.any((r) => loc == r || loc.startsWith(r));
+      if (!isAllowed) return '/auth/welcome';
+    }
 
     // Unauthenticated users can't access protected screens
     if (!isAuthenticated && !isGoingToAuth && !isOnRoot && !isOnboarding) {
